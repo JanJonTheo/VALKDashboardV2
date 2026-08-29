@@ -1,0 +1,579 @@
+openapi: 3.1.0
+info:
+  title: VALK Dashboard API
+  version: 2.0.0
+  description: Contracts consumed by the Next.js BFF. Legacy API-key authentication remains supported beside short-lived dashboard bearer tokens.
+servers:
+  - url: /api
+security:
+  - dashboardBearer: []
+  - legacyApiKey: []
+paths:
+  /summary/leaderboard:
+    get:
+      operationId: getLeaderboard
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /summary/monthly-performance:
+    get:
+      operationId: getMonthlyPerformance
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /summary/monthly-performance/assessment:
+    post:
+      operationId: createMonthlyAssessment
+      x-capability: assessment:run
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: object,
+                      required: [monthly_data],
+                      properties:
+                        {
+                          monthly_data:
+                            {
+                              type: array,
+                              items:
+                                { type: object, additionalProperties: true },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+      responses:
+        {
+          "200":
+            {
+              description: Assessment result,
+              content:
+                {
+                  application/json:
+                    { schema: { type: object, additionalProperties: true } },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /summary/discord/report:
+    post:
+      operationId: sendDiscordReport
+      x-capability: reports:send
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: object,
+                      required: [page],
+                      properties:
+                        {
+                          page: { type: string },
+                          mode: { type: string, enum: [full, top5] },
+                        },
+                    },
+                },
+            },
+        }
+      responses:
+        {
+          "200":
+            {
+              description: Report status,
+              content:
+                {
+                  application/json:
+                    { schema: { type: object, additionalProperties: true } },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /objectives:
+    get:
+      operationId: getObjectives
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+    post:
+      operationId: createObjective
+      x-capability: objectives:write
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/ObjectiveInput" } },
+            },
+        }
+      responses:
+        {
+          "201":
+            {
+              description: Created,
+              content:
+                {
+                  application/json:
+                    { schema: { type: object, additionalProperties: true } },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /objectives/{objective_id}:
+    delete:
+      operationId: deleteObjective
+      x-capability: objectives:write
+      parameters:
+        [
+          {
+            name: objective_id,
+            in: path,
+            required: true,
+            schema: { type: integer },
+          },
+        ]
+      responses:
+        {
+          "200": { description: Deleted },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /bounty-vouchers:
+    get:
+      operationId: getBountyVouchers
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /syntheticcz-summary:
+    get:
+      operationId: getSpaceCzSummary
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /syntheticgroundcz-summary:
+    get:
+      operationId: getGroundCzSummary
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /colonisation/contributions:
+    get:
+      operationId: getColonisationContributions
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /colonisation/constructions:
+    get:
+      operationId: getColonisationConstructions
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /system-summary:
+    get:
+      operationId: getSystemSummary
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /system-watchlist-data:
+    post:
+      operationId: getSystemWatchlistData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [systems]
+              properties:
+                systems:
+                  type: array
+                  maxItems: 100
+                  items: { type: string, minLength: 2, maxLength: 255 }
+                history_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 30
+                  default: 30
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /fsdjump-factions:
+    get:
+      operationId: getFactionReport
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /table/{table}:
+    get:
+      operationId: getTableRows
+      x-capability: admin:read
+      parameters:
+        - { name: table, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Direction"
+        - {
+            name: filters,
+            in: query,
+            schema: { type: string },
+            description: JSON-encoded structured filter expression,
+          }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/DataResponse" },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /admin/users:
+    get:
+      operationId: listDashboardUsers
+      security: [{ dashboardBearer: [] }]
+      x-capability: users:manage
+      responses:
+        {
+          "200":
+            {
+              description: Tenant users,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        {
+                          type: object,
+                          required: [data, generated_at],
+                          properties:
+                            {
+                              data:
+                                {
+                                  type: array,
+                                  items:
+                                    {
+                                      $ref: "#/components/schemas/DashboardUser",
+                                    },
+                                },
+                              generated_at: { type: string, format: date-time },
+                            },
+                        },
+                    },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+    post:
+      operationId: createDashboardUser
+      security: [{ dashboardBearer: [] }]
+      x-capability: users:manage
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: object,
+                      required: [username, role],
+                      properties:
+                        {
+                          username:
+                            { type: string, minLength: 3, maxLength: 128 },
+                          role: { $ref: "#/components/schemas/DashboardRole" },
+                          auth_email: { type: [string, "null"], format: email },
+                        },
+                    },
+                },
+            },
+        }
+      responses:
+        {
+          "201":
+            {
+              description: Created user and one-time password,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        {
+                          type: object,
+                          required: [user, one_time_password],
+                          properties:
+                            {
+                              user:
+                                { $ref: "#/components/schemas/DashboardUser" },
+                              one_time_password:
+                                { type: string, writeOnly: true },
+                            },
+                        },
+                    },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /admin/users/{user_id}:
+    parameters:
+      [{ name: user_id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: updateDashboardUser
+      security: [{ dashboardBearer: [] }]
+      x-capability: users:manage
+      responses:
+        {
+          "200":
+            {
+              description: Updated user,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        {
+                          type: object,
+                          properties:
+                            {
+                              user:
+                                { $ref: "#/components/schemas/DashboardUser" },
+                            },
+                        },
+                    },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+    delete:
+      operationId: deleteDashboardUser
+      security: [{ dashboardBearer: [] }]
+      x-capability: users:manage
+      responses:
+        {
+          "200": { description: User deleted },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /admin/users/{user_id}/reset-password:
+    post:
+      operationId: resetDashboardUserPassword
+      security: [{ dashboardBearer: [] }]
+      x-capability: users:manage
+      parameters:
+        [{ name: user_id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          "200":
+            {
+              description: One-time password,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        {
+                          type: object,
+                          required: [one_time_password],
+                          properties:
+                            {
+                              one_time_password:
+                                { type: string, writeOnly: true },
+                            },
+                        },
+                    },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /account/access:
+    get:
+      operationId: getDashboardAccess
+      security: [{ dashboardBearer: [] }]
+      responses:
+        {
+          "200":
+            {
+              description: Current tenant access,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        {
+                          type: object,
+                          properties:
+                            {
+                              user:
+                                { $ref: "#/components/schemas/DashboardUser" },
+                              role:
+                                { $ref: "#/components/schemas/DashboardRole" },
+                              capabilities:
+                                { type: array, items: { type: string } },
+                            },
+                        },
+                    },
+                },
+            },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+  /account/change-password:
+    post:
+      operationId: changeDashboardPassword
+      security: [{ dashboardBearer: [] }]
+      responses:
+        {
+          "200": { description: Password changed },
+          default: { $ref: "#/components/responses/ErrorResponse" },
+        }
+components:
+  securitySchemes:
+    dashboardBearer: { type: http, scheme: bearer, bearerFormat: JWT }
+    legacyApiKey: { type: apiKey, in: header, name: apikey }
+  parameters:
+    Page:
+      {
+        name: page,
+        in: query,
+        schema: { type: integer, minimum: 1, default: 1 },
+      }
+    PageSize:
+      {
+        name: page_size,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 250, default: 25 },
+      }
+    Sort: { name: sort, in: query, schema: { type: string } }
+    Direction:
+      {
+        name: direction,
+        in: query,
+        schema: { type: string, enum: [asc, desc], default: asc },
+      }
+  schemas:
+    DashboardRole: { type: string, enum: [member, leadership, admin] }
+    DashboardUser:
+      type: object
+      required: [id, username, role, active, must_change_password]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { $ref: "#/components/schemas/DashboardRole" }
+        active: { type: boolean }
+        must_change_password: { type: boolean }
+        auth_email: { type: [string, "null"], format: email }
+        auth_email_verified: { type: boolean }
+        auth_image: { type: [string, "null"] }
+        created_at: { type: [string, "null"], format: date-time }
+        updated_at: { type: [string, "null"], format: date-time }
+        last_login_at: { type: [string, "null"], format: date-time }
+    ObjectiveInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 3 }
+        system: { type: string }
+        faction: { type: string }
+        description: { type: string }
+        startdate: { type: string, format: date-time }
+        enddate: { type: string, format: date-time }
+        targets:
+          { type: array, items: { type: object, additionalProperties: true } }
+    Pagination:
+      {
+        type: object,
+        required: [page, page_size, total],
+        properties:
+          {
+            page: { type: integer },
+            page_size: { type: integer },
+            total: { type: integer },
+          },
+      }
+    DataEnvelope:
+      {
+        type: object,
+        required: [data, generated_at],
+        properties:
+          {
+            data:
+              {
+                type: array,
+                items: { type: object, additionalProperties: true },
+              },
+            generated_at: { type: string, format: date-time },
+            pagination: { $ref: "#/components/schemas/Pagination" },
+          },
+      }
+    ErrorEnvelope:
+      {
+        type: object,
+        required: [error],
+        properties:
+          {
+            error:
+              {
+                type: object,
+                required: [code, message, correlation_id],
+                properties:
+                  {
+                    code: { type: string },
+                    message: { type: string },
+                    correlation_id: { type: string },
+                  },
+              },
+            generated_at: { type: string, format: date-time },
+          },
+      }
+  responses:
+    DataResponse:
+      {
+        description: Paginated data envelope,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/DataEnvelope" } },
+          },
+      }
+    ErrorResponse:
+      {
+        description: Uniform error envelope,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/ErrorEnvelope" } },
+          },
+      }

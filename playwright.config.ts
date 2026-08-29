@@ -1,0 +1,3 @@
+import { defineConfig,devices } from "@playwright/test";
+
+export default defineConfig({testDir:"./tests/e2e",fullyParallel:true,reporter:"html",use:{baseURL:"http://127.0.0.1:3001",trace:"retain-on-failure"},projects:[{name:"desktop",use:{...devices["Desktop Chrome"],viewport:{width:1440,height:900}}},{name:"tablet",use:{...devices["Desktop Chrome"],viewport:{width:1024,height:768}}},{name:"phone",use:{...devices["Desktop Chrome"],viewport:{width:390,height:844},isMobile:true,hasTouch:true}}],webServer:{command:"pnpm dev --port 3001",url:"http://127.0.0.1:3001/api/health",reuseExistingServer:true,timeout:120_000,env:{VALK_DEMO_MODE:"true"}}});
