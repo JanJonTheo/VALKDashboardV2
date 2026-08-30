@@ -61,6 +61,7 @@ def main() -> int:
             "DASHBOARD_JWT_SECRET": jwt_secret,
             "BETTER_AUTH_SECRET": better_auth_secret,
             "VALK_TENANT_DB_ROOT": "/home/valk",
+            "VALK_EDDN_DATABASE": "/home/valk/db/bgs_data_eddn.db",
             "VALK_SOCIAL_AUTH_ENABLED": "false",
             "NEXT_PUBLIC_VALK_SOCIAL_AUTH_ENABLED": "false",
         },

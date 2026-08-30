@@ -2,6 +2,7 @@ import type { FeatureKey } from "./features";
 import {
   normalizeColonisationConstructions,
   normalizeColonisationContributionGroups,
+  normalizeColonisationContributionRecords,
 } from "./colonisation";
 
 type Row = Record<string, unknown>;
@@ -185,6 +186,9 @@ function normalizeColonisation(row: Row): Row {
       row.construction_name ?? row.construction ?? row.site_name ?? row.name,
     cmdr: row.cmdr,
     commodity: row.commodity_name ?? row.commodity,
+    system: row.target_system ?? row.system,
+    timestamp: row.timestamp,
+    tickId: row.tickid,
     delivered,
     cmdrDelivered: number(row.cmdr_quantity ?? delivered),
     required,
@@ -488,13 +492,27 @@ export function normalizeFeaturePayload(key: FeatureKey, envelope: Envelope) {
 
   if (key === "colonisation") {
     const constructions = normalizeColonisationConstructions(
-      envelope.constructions,
+      envelope.construction_details ?? envelope.constructions,
     );
     const contributionGroups = normalizeColonisationContributionGroups(
       envelope.groups,
+      constructions,
     );
-    if (constructions.length || contributionGroups.length)
-      meta = { ...meta, constructions, contributionGroups };
+    const contributionRecords = normalizeColonisationContributionRecords(
+      envelope.records,
+      constructions,
+    );
+    if (
+      constructions.length ||
+      contributionGroups.length ||
+      contributionRecords.length
+    )
+      meta = {
+        ...meta,
+        constructions,
+        contributionGroups,
+        contributionRecords,
+      };
   }
 
   const metrics = {

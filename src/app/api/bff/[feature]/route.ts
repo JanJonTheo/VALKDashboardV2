@@ -1,4 +1,11 @@
 import { NextResponse } from "next/server";
+import {
+  collectExplorerFilterOptions,
+  EVENT_TABLE_COLUMNS,
+  isDataExplorerTable,
+  orderExplorerColumns,
+  type DataExplorerRow,
+} from "@/lib/data-explorer";
 import { features, type FeatureSpec } from "@/lib/features";
 import { mockPayload } from "@/lib/mock-data";
 import { flaskRequest } from "@/lib/flask";
@@ -93,19 +100,125 @@ function upstreamRequest(request: Request, spec: FeatureSpec) {
     upstream.searchParams.set("group_by", "month");
   }
 
-  if (
-    spec.key === "colonisation" &&
-    !["constructions", "commodities"].includes(
-      incoming.searchParams.get("view") ?? "",
-    )
-  ) {
-    upstream.searchParams.set("group_by", "cmdr");
+  if (spec.key === "colonisation") {
+    const view = incoming.searchParams.get("view") ?? "contributions";
+    if (!["constructions", "commodities"].includes(view)) {
+      upstream.searchParams.set(
+        "group_by",
+        view === "contribution-events" ? "construction" : "cmdr",
+      );
+    }
+    const fromDate = incoming.searchParams.get("from_date")?.trim();
+    const toDate = incoming.searchParams.get("to_date")?.trim();
+    if (fromDate || toDate) {
+      upstream.searchParams.set("period", "custom");
+      if (!fromDate && toDate) upstream.searchParams.set("from", toDate);
+      if (fromDate && !toDate) upstream.searchParams.set("to", fromDate);
+    } else if (incoming.searchParams.get("period") === "date-range") {
+      upstream.searchParams.set("period", "all");
+    }
   }
 
   return new Request(upstream, {
     method: request.method,
     headers: request.headers,
   });
+}
+
+const explorerPageSize = 250;
+const explorerConcurrency = 6;
+
+function explorerRows(envelope: Record<string, unknown>): DataExplorerRow[] {
+  return Array.isArray(envelope.data)
+    ? (envelope.data.filter(
+        (row): row is DataExplorerRow =>
+          Boolean(row) && typeof row === "object" && !Array.isArray(row),
+      ) as DataExplorerRow[])
+    : [];
+}
+
+function explorerTotal(
+  envelope: Record<string, unknown>,
+  fallback: number,
+): number {
+  const pagination = envelope.pagination;
+  if (!pagination || typeof pagination !== "object") return fallback;
+  const total = Number((pagination as Record<string, unknown>).total);
+  return Number.isFinite(total) && total >= 0 ? total : fallback;
+}
+
+function explorerPageRequest(
+  request: Request,
+  spec: FeatureSpec,
+  page: number,
+) {
+  const url = new URL(request.url);
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("page_size", String(explorerPageSize));
+  url.searchParams.delete("scope");
+  url.searchParams.delete("options");
+  return upstreamRequest(
+    new Request(url, { method: "GET", headers: request.headers }),
+    spec,
+  );
+}
+
+async function loadExplorerRows(
+  request: Request,
+  spec: FeatureSpec,
+  endpoint: string,
+  session: Awaited<ReturnType<typeof requireDashboardSession>>,
+): Promise<
+  | {
+      ok: true;
+      rows: DataExplorerRow[];
+      generatedAt: string;
+      correlation: string | null;
+    }
+  | { ok: false; response: Response }
+> {
+  const loadPage = async (page: number) => {
+    const response = await flaskRequest(
+      endpoint,
+      explorerPageRequest(request, spec, page),
+      session,
+    );
+    if (!response.ok) return { ok: false as const, response };
+    const envelope = (await response.json()) as Record<string, unknown>;
+    return {
+      ok: true as const,
+      envelope,
+      rows: explorerRows(envelope),
+      correlation: response.headers.get("x-correlation-id"),
+    };
+  };
+
+  const first = await loadPage(1);
+  if (!first.ok) return first;
+  const rows = [...first.rows];
+  const total = explorerTotal(first.envelope, rows.length);
+  const pages = Math.ceil(total / explorerPageSize);
+  for (let start = 2; start <= pages; start += explorerConcurrency) {
+    const pageNumbers = Array.from(
+      { length: Math.min(explorerConcurrency, pages - start + 1) },
+      (_, index) => start + index,
+    );
+    const batch = await Promise.all(pageNumbers.map(loadPage));
+    const failure = batch.find((result) => !result.ok);
+    if (failure && !failure.ok) return failure;
+    for (const result of batch) {
+      if (result.ok) rows.push(...result.rows);
+    }
+  }
+  return {
+    ok: true,
+    rows,
+    generatedAt:
+      typeof first.envelope.generated_at === "string"
+        ? first.envelope.generated_at
+        : new Date().toISOString(),
+    correlation: first.correlation,
+  };
 }
 
 async function healthPayload(
@@ -211,14 +324,13 @@ export async function GET(
     } else if (spec.key === "systems" && query.get("system")?.trim()) {
       endpoint = `system-summary/${encodeURIComponent(query.get("system")!.trim())}`;
     } else if (spec.key === "data-explorer") {
-      const table = query.get("table")?.trim() || "cmdr";
-      if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(table)) {
+      const table = query.get("table")?.trim() || "event";
+      if (!isDataExplorerTable(table)) {
         return NextResponse.json(
           {
             error: {
               code: "INVALID_TABLE",
-              message:
-                "Table names may only contain letters, numbers and underscores",
+              message: "The selected table is not available in Data explorer",
               correlation_id: correlation,
             },
           },
@@ -228,9 +340,86 @@ export async function GET(
       endpoint = `table/${table}`;
     }
 
-    const response = await flaskRequest(endpoint, upstream, session);
+    if (
+      spec.key === "data-explorer" &&
+      (query.get("scope") === "all" || query.get("options") === "1")
+    ) {
+      const table = query.get("table")?.trim() || "event";
+      const result = await loadExplorerRows(request, spec, endpoint, session);
+      if (!result.ok) return result.response;
+      const columns = orderExplorerColumns(
+        [
+          ...(table === "event" ? EVENT_TABLE_COLUMNS : []),
+          ...result.rows.flatMap((row) => Object.keys(row)),
+        ],
+        table,
+      );
+      if (query.get("options") === "1") {
+        return NextResponse.json(
+          {
+            data: [],
+            metrics: {
+              rows: result.rows.length,
+              returned: 0,
+              page: 1,
+              pageSize: explorerPageSize,
+            },
+            generated_at: result.generatedAt,
+            pagination: {
+              page: 1,
+              page_size: explorerPageSize,
+              total: result.rows.length,
+            },
+            meta: {
+              columns,
+              filter_options: collectExplorerFilterOptions(result.rows),
+            },
+          },
+          {
+            headers: {
+              "x-correlation-id": result.correlation ?? correlation,
+            },
+          },
+        );
+      }
+      const normalized = normalizeFeaturePayload("data-explorer", {
+        data: result.rows,
+        generated_at: result.generatedAt,
+        pagination: {
+          page: 1,
+          page_size: result.rows.length || explorerPageSize,
+          total: result.rows.length,
+        },
+      });
+      return NextResponse.json(
+        { ...normalized, meta: { columns } },
+        {
+          headers: {
+            "x-correlation-id": result.correlation ?? correlation,
+          },
+        },
+      );
+    }
+
+    const isColonisationContributionEndpoint =
+      spec.key === "colonisation" && endpoint === "colonisation/contributions";
+    const [response, constructionResponse] = await Promise.all([
+      flaskRequest(endpoint, upstream, session),
+      isColonisationContributionEndpoint
+        ? flaskRequest(
+            "colonisation/constructions",
+            new Request(upstream),
+            session,
+          )
+        : Promise.resolve(null),
+    ]);
     if (!response.ok) return response;
     const envelope = (await response.json()) as Record<string, unknown>;
+    if (constructionResponse?.ok) {
+      const constructionEnvelope =
+        (await constructionResponse.json()) as Record<string, unknown>;
+      envelope.construction_details = constructionEnvelope.constructions;
+    }
     return NextResponse.json(normalizeFeaturePayload(spec.key, envelope), {
       status: response.status,
       headers: {

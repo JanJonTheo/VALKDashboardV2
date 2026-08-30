@@ -42,4 +42,22 @@ describe("dashboard view preferences", () => {
       }),
     ).toBeNull();
   });
+
+  it("accepts legacy single filters and persisted multi-select values", () => {
+    const preference = preferencePayload({
+      filters: {
+        system: "Synookoi",
+        cmdr: ["JanJonTheo", "Unattributed deliveries"],
+        commodity: ["Aluminium", "Water"],
+      },
+      sorting: [{ id: "colonisation:constructions:system", desc: false }],
+      visibleColumns: [],
+      pageSize: 25,
+    });
+    expect(preference?.filters.system).toBe("Synookoi");
+    expect(preference?.filters.cmdr).toEqual([
+      "JanJonTheo",
+      "Unattributed deliveries",
+    ]);
+  });
 });

@@ -30,7 +30,7 @@ Open `http://localhost:3000`. Set `VALK_DEMO_ROLE=member`, `leadership` or `admi
 ## Production configuration
 
 1. Copy `.env.example` to `.env.runtime` and replace the session secret.
-2. Point `VALK_TENANT_FILE` at the existing Flask tenant file and `VALK_TENANT_LOGO_DIR` at the Streamlit assets.
+2. Point `VALK_TENANT_FILE` at the existing Flask tenant file, `VALK_EDDN_DATABASE` at the shared EDDN SQLite database and `VALK_TENANT_LOGO_DIR` at the Streamlit assets.
 3. Install dependencies and run `pnpm build` with `VALK_DEMO_MODE=false`.
 4. Start `deploy/start-native.sh`; the production server binds to port 8889 by default.
 

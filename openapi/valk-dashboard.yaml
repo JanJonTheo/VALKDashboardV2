@@ -232,6 +232,342 @@ paths:
           "200": { $ref: "#/components/responses/DataResponse" },
           default: { $ref: "#/components/responses/ErrorResponse" },
         }
+  /dashboard/bgs/rules:
+    get:
+      operationId: listBgsRules
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      responses:
+        "200":
+          description: Visible personal and tenant BGS rules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, generated_at]
+                properties:
+                  data:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/BgsRule" },
+                    }
+                  generated_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    post:
+      operationId: createBgsRule
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            { schema: { $ref: "#/components/schemas/BgsRuleInput" } }
+      responses:
+        "201":
+          description: Created rule
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties: { data: { $ref: "#/components/schemas/BgsRule" } }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/rules/{rule_id}:
+    parameters:
+      - {
+          name: rule_id,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        }
+    patch:
+      operationId: updateBgsRule
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            { schema: { $ref: "#/components/schemas/BgsRuleInput" } }
+      responses:
+        "200": { description: Updated rule }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    delete:
+      operationId: deleteBgsRule
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      responses:
+        "200": { description: Rule deleted }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/rule-templates:
+    get:
+      operationId: listBgsRuleTemplates
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      parameters:
+        - {
+            name: include_archived,
+            in: query,
+            schema: { type: boolean, default: false },
+          }
+      responses:
+        "200":
+          description: Tenant-local rule catalog and visible package applications
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  [
+                    data,
+                    discord_availability,
+                    can_manage_templates,
+                    can_apply_global,
+                    generated_at,
+                  ]
+                properties:
+                  data:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/BgsRuleTemplate" },
+                    }
+                  discord_availability:
+                    type: object
+                    required: [personal, global]
+                    properties:
+                      personal: { type: boolean }
+                      global: { type: boolean }
+                  can_manage_templates: { type: boolean }
+                  can_apply_global: { type: boolean }
+                  generated_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    post:
+      operationId: createBgsRuleTemplate
+      security: [{ dashboardBearer: [] }]
+      x-capability: tenant-rules:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            { schema: { $ref: "#/components/schemas/BgsRuleTemplateInput" } }
+      responses:
+        "201": { description: Created template }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/rule-templates/{template_id}:
+    patch:
+      operationId: updateBgsRuleTemplate
+      security: [{ dashboardBearer: [] }]
+      x-capability: tenant-rules:write
+      parameters:
+        - {
+            name: template_id,
+            in: path,
+            required: true,
+            schema: { type: string },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            { schema: { $ref: "#/components/schemas/BgsRuleTemplateInput" } }
+      responses:
+        "200": { description: Updated, archived, or restored template }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/rule-templates/{template_id}/apply:
+    post:
+      operationId: applyBgsRuleTemplate
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      parameters:
+        - {
+            name: template_id,
+            in: path,
+            required: true,
+            schema: { type: string },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [watchlist_scope, discord]
+              properties:
+                watchlist_scope: { type: string, enum: [personal, global] }
+                discord: { type: boolean }
+      responses:
+        "200": { description: Existing package }
+        "201": { description: Applied package }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/rule-packages/{package_id}/sync:
+    post:
+      operationId: syncBgsRulePackage
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      parameters:
+        - {
+            name: package_id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        "200":
+          { description: Package synchronized to the current template version }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/alerts:
+    get:
+      operationId: listBgsAlerts
+      security: [{ dashboardBearer: [] }]
+      x-capability: dashboard:read
+      parameters:
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [all, active, resolved] },
+          }
+        - {
+            name: scope,
+            in: query,
+            schema: { type: string, enum: [all, personal, tenant] },
+          }
+        - {
+            name: severity,
+            in: query,
+            schema: { type: string, enum: [all, info, warning, critical] },
+          }
+        - { name: system, in: query, schema: { type: string, maxLength: 255 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 200 },
+          }
+      responses:
+        "200":
+          description: Visible alerts and unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, unread_count, generated_at]
+                properties:
+                  data:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/BgsAlert" },
+                    }
+                  unread_count: { type: integer, minimum: 0 }
+                  generated_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/alerts/{alert_id}/state:
+    patch:
+      operationId: updateBgsAlertState
+      security: [{ dashboardBearer: [] }]
+      x-capability: dashboard:read
+      parameters:
+        - {
+            name: alert_id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                read: { type: boolean }
+                acknowledged: { type: boolean }
+      responses:
+        "200": { description: User-local alert state updated }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /account/discord-webhook:
+    get:
+      operationId: getPersonalDiscordWebhookStatus
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      responses:
+        "200": { description: Masked webhook configuration status }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    put:
+      operationId: setPersonalDiscordWebhook
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [webhook_url]
+              properties:
+                { webhook_url: { type: string, format: uri, maxLength: 2048 } }
+      responses:
+        "200": { description: Webhook encrypted and saved }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    delete:
+      operationId: deletePersonalDiscordWebhook
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      responses:
+        "200": { description: Webhook removed }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /account/discord-webhook/test:
+    post:
+      operationId: testPersonalDiscordWebhook
+      security: [{ dashboardBearer: [] }]
+      x-capability: rules:write
+      responses:
+        "200": { description: Test message delivered }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/ai-reports:
+    get:
+      operationId: listBgsAiReports
+      security: [{ dashboardBearer: [] }]
+      x-capability: dashboard:read
+      parameters:
+        - { name: system, in: query, schema: { type: string, maxLength: 255 } }
+        - {
+            name: type,
+            in: query,
+            schema: { type: string, enum: [risk, strategy] },
+          }
+      responses:
+        "200":
+          description: Tenant-wide BGS AI report history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, generated_at]
+                properties:
+                  data:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/BgsAiReport" },
+                    }
+                  generated_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/ai-reports/analyze:
+    post:
+      operationId: createBgsAiReport
+      security: [{ dashboardBearer: [] }]
+      x-capability: bgs-ai:run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [system_name, report_type]
+              properties:
+                system_name: { type: string, minLength: 2, maxLength: 255 }
+                report_type: { type: string, enum: [risk, strategy] }
+      responses:
+        "201": { description: Structured report created and stored }
+        default: { $ref: "#/components/responses/ErrorResponse" }
   /fsdjump-factions:
     get:
       operationId: getFactionReport
@@ -512,6 +848,198 @@ components:
         enddate: { type: string, format: date-time }
         targets:
           { type: array, items: { type: object, additionalProperties: true } }
+    BgsRuleInput:
+      type: object
+      required:
+        [
+          name,
+          owner_scope,
+          target_scope,
+          condition_type,
+          threshold_pp,
+          window_days,
+          severity,
+          personal_discord,
+          tenant_discord,
+          enabled,
+        ]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 160 }
+        owner_scope: { type: string, enum: [personal, tenant] }
+        target_scope: { type: string, enum: [system, watchlist_all] }
+        target_system: { type: [string, "null"], maxLength: 255 }
+        condition_type: { $ref: "#/components/schemas/BgsRuleConditionType" }
+        condition: { $ref: "#/components/schemas/BgsCondition" }
+        threshold_pp: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        window_days: { type: integer, minimum: 1, maximum: 30 }
+        severity: { type: string, enum: [info, warning, critical] }
+        personal_discord: { type: boolean }
+        tenant_discord: { type: boolean }
+        enabled: { type: boolean }
+    BgsRule:
+      allOf:
+        - { $ref: "#/components/schemas/BgsRuleInput" }
+        - type: object
+          required: [id, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            owner_user_id: { type: [string, "null"] }
+            package_id: { type: [string, "null"], format: uuid }
+            template_id: { type: [string, "null"] }
+            template_version: { type: [integer, "null"] }
+            template_item_key: { type: [string, "null"] }
+            effective_from: { type: [string, "null"], format: date-time }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    BgsRuleConditionType:
+      type: string
+      enum:
+        [
+          controller_below,
+          controller_gap,
+          competitor_gain,
+          competitor_loss,
+          controller_loss,
+          tenant_faction_loss,
+          tenant_faction_new_conflict,
+          tenant_faction_below,
+          tenant_faction_gap,
+        ]
+    BgsCondition:
+      type: object
+      required: [type]
+      properties:
+        type: { $ref: "#/components/schemas/BgsRuleConditionType" }
+        threshold_pp: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        window_days: { type: integer, minimum: 1, maximum: 30 }
+        comparison: { type: string, enum: [previous_settled_tick] }
+        gap_mode: { type: string, enum: [absolute] }
+        conflict_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [election, war] }
+    BgsRuleTemplateItem:
+      type: object
+      required: [key, name, condition, severity]
+      properties:
+        key: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+        name: { type: string, minLength: 3, maxLength: 160 }
+        condition: { $ref: "#/components/schemas/BgsCondition" }
+        severity: { type: string, enum: [info, warning, critical] }
+    BgsRuleTemplateInput:
+      type: object
+      required: [name, description, default_discord, items]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 160 }
+        description: { type: string, maxLength: 1000 }
+        default_discord: { type: boolean }
+        archived: { type: boolean }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/BgsRuleTemplateItem" }
+    BgsRulePackage:
+      type: object
+      required:
+        [
+          id,
+          template_id,
+          template_version,
+          owner_scope,
+          watchlist_scope,
+          personal_discord,
+          tenant_discord,
+          rules,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        template_id: { type: string }
+        template_version: { type: integer, minimum: 1 }
+        owner_scope: { type: string, enum: [personal, tenant] }
+        owner_user_id: { type: [string, "null"] }
+        watchlist_scope: { type: string, enum: [personal, global] }
+        personal_discord: { type: boolean }
+        tenant_discord: { type: boolean }
+        rules: { type: array, items: { $ref: "#/components/schemas/BgsRule" } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    BgsRuleTemplate:
+      allOf:
+        - { $ref: "#/components/schemas/BgsRuleTemplateInput" }
+        - type: object
+          required:
+            [
+              id,
+              version,
+              archived,
+              archived_at,
+              packages,
+              created_at,
+              updated_at,
+            ]
+          properties:
+            id: { type: string }
+            version: { type: integer, minimum: 1 }
+            archived: { type: boolean }
+            archived_at: { type: [string, "null"], format: date-time }
+            packages:
+              {
+                type: array,
+                items: { $ref: "#/components/schemas/BgsRulePackage" },
+              }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    BgsAlert:
+      type: object
+      required:
+        [
+          id,
+          rule_name,
+          owner_scope,
+          system_name,
+          severity,
+          title,
+          message,
+          facts,
+          fired_ticktime,
+          fired_at,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        rule_id: { type: [string, "null"] }
+        rule_name: { type: string }
+        owner_scope: { type: string, enum: [personal, tenant] }
+        system_name: { type: string }
+        severity: { type: string, enum: [info, warning, critical] }
+        title: { type: string }
+        message: { type: string }
+        facts: { type: object, additionalProperties: true }
+        event_key: { type: string }
+        fired_ticktime: { type: string }
+        fired_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        read_at: { type: [string, "null"], format: date-time }
+        acknowledged_at: { type: [string, "null"], format: date-time }
+    BgsAiReport:
+      type: object
+      required:
+        [id, report_type, system_name, model, status, report, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        report_type: { type: string, enum: [risk, strategy] }
+        system_name: { type: string }
+        requested_by: { type: [string, "null"] }
+        tenant_faction: { type: [string, "null"] }
+        source_ticktime: { type: [string, "null"] }
+        model: { type: string }
+        status: { type: string, enum: [completed] }
+        report: { type: object, additionalProperties: true }
+        source: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
     Pagination:
       {
         type: object,

@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import secrets
 import socket
 import sqlite3
@@ -102,6 +103,13 @@ def expect(status: int, expected: int, label: str) -> None:
         raise RuntimeError(f"{label}: expected HTTP {expected}, received {status}")
 
 
+def natural_sort_key(value: str):
+    return [
+        int(part) if part.isdigit() else part.casefold()
+        for part in re.split(r"(\d+)", value)
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", required=True)
@@ -140,11 +148,25 @@ def main() -> int:
         (
             tenant
             for tenant in tenant_values
-            if tenant.get("id") == args.tenant_id
-            or tenant.get("name") == "VALK Development"
+            if (
+                tenant.get("id")
+                or re.sub(r"[^a-z0-9]+", "-", tenant.get("name", "").lower()).strip(
+                    "-"
+                )
+            )
+            == args.tenant_id
         ),
         None,
     )
+    if not tenant_config and args.tenant_id == "valk-development":
+        tenant_config = next(
+            (
+                tenant
+                for tenant in tenant_values
+                if tenant.get("name") == "VALK Development"
+            ),
+            None,
+        )
     if not tenant_config:
         raise RuntimeError("The selected tenant is unavailable")
     connection = sqlite3.connect(database_path, timeout=30)
@@ -332,6 +354,25 @@ def main() -> int:
                     "SELECT count(*) FROM eddn_conflict WHERE system_name=? COLLATE NOCASE",
                     (system_name,),
                 ).fetchone()[0]
+                tenant_faction = tenant_config.get("faction_name") or tenant_config.get(
+                    "name"
+                )
+                expected_global_total = eddn.execute(
+                    "SELECT count(DISTINCT system_name) FROM eddn_faction "
+                    "WHERE system_name IS NOT NULL AND name=?",
+                    (tenant_faction,),
+                ).fetchone()[0]
+                expected_global_names = sorted(
+                    [
+                        row[0]
+                        for row in eddn.execute(
+                            "SELECT DISTINCT system_name FROM eddn_faction "
+                            "WHERE system_name IS NOT NULL AND name=?",
+                            (tenant_faction,),
+                        ).fetchall()
+                    ],
+                    key=natural_sort_key,
+                )[:25]
 
             encoded_system = urllib.parse.quote(system_name, safe="")
             status, flask_system = bearer_request(
@@ -360,6 +401,28 @@ def main() -> int:
                     raise RuntimeError(f"EDDN mismatch for {key}")
             if flask_system.get("system_info", {}).get("system_name") != system_name:
                 raise RuntimeError("Flask EDDN system differs from the source database")
+
+            status, global_watchlist = request(
+                args.base_url,
+                "/api/system-watchlist/global?page=1&sort=system&direction=asc",
+                cookie,
+            )
+            expect(status, 200, "global system watchlist")
+            pagination = global_watchlist.get("pagination", {})
+            if pagination.get("page_size") != 25:
+                raise RuntimeError("Global watchlist returned the wrong page size")
+            if pagination.get("total") != expected_global_total:
+                raise RuntimeError(
+                    "Global watchlist returned the wrong total: "
+                    f"expected {expected_global_total}, got {pagination.get('total')}"
+                )
+            global_names = [
+                row.get("requested_system")
+                or row.get("system_info", {}).get("system_name")
+                for row in global_watchlist.get("data", [])
+            ]
+            if global_names != expected_global_names:
+                raise RuntimeError("Global watchlist returned the wrong first page")
 
             watchlist = {
                 "systems": [

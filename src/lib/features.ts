@@ -1,4 +1,5 @@
 import type { Capability } from "./access";
+import { DATA_EXPLORER_TABLES, dataExplorerTableLabel } from "./data-explorer";
 
 export type FeatureKey =
   | "leaderboard"
@@ -36,7 +37,7 @@ export interface FeatureFilterOption {
 export interface FeatureFilter {
   key: string;
   label: string;
-  type?: "text" | "number" | "select" | "date" | "month";
+  type?: "text" | "number" | "select" | "multiselect" | "date" | "month";
   placement?: "page" | "drawer";
   /** Query parameter understood by Flask. Omit for client-only filters. */
   param?: string;
@@ -474,14 +475,53 @@ export const features: FeatureSpec[] = [
       {
         key: "cmdr",
         label: "Commander",
-        param: "cmdr",
-        placeholder: "Exact commander name",
+        type: "multiselect",
+        options: [{ value: "", label: "Any commander" }],
       },
       {
         key: "status",
         label: "Status",
-        param: "status",
-        placeholder: "Construction status",
+        type: "select",
+        options: [
+          { value: "", label: "Any status" },
+          { value: "open", label: "open" },
+          { value: "finished", label: "finished" },
+        ],
+      },
+      {
+        key: "system",
+        label: "System",
+        type: "select",
+        options: [{ value: "", label: "Any system" }],
+      },
+      {
+        key: "from_date",
+        label: "Date from",
+        type: "date",
+        param: "from",
+      },
+      {
+        key: "to_date",
+        label: "Date to",
+        type: "date",
+        param: "to",
+      },
+      {
+        key: "commodity",
+        label: "Commodity",
+        type: "multiselect",
+        options: [{ value: "", label: "Any commodity" }],
+      },
+      {
+        key: "visual_limit",
+        label: "Visual analysis",
+        type: "select",
+        defaultValue: "5",
+        options: [
+          { value: "5", label: "Top 5" },
+          { value: "10", label: "Top 10" },
+          { value: "25", label: "Top 25" },
+        ],
       },
     ],
     columns: [
@@ -648,9 +688,13 @@ export const features: FeatureSpec[] = [
     filters: [
       {
         key: "table",
-        label: "Table",
-        defaultValue: "cmdr",
-        placeholder: "Database table name",
+        label: "Table type",
+        type: "select",
+        defaultValue: "event",
+        options: DATA_EXPLORER_TABLES.map((table) => ({
+          value: table,
+          label: dataExplorerTableLabel(table),
+        })),
       },
     ],
     columns: [

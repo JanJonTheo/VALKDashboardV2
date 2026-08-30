@@ -7,6 +7,7 @@ import type { FeatureSpec } from "./features";
 import {
   defaultViewPreference,
   preferencePayload,
+  viewFilterValues,
   type ViewPreference,
 } from "./preferences";
 
@@ -66,8 +67,12 @@ export function useViewPreference(
     }
     for (const filter of spec.filters) {
       if (filter.key === "period") continue;
-      if (searchParams.has(filter.key))
-        next.filters[filter.key] = searchParams.get(filter.key) ?? "";
+      if (searchParams.has(filter.key)) {
+        next.filters[filter.key] =
+          filter.type === "multiselect"
+            ? searchParams.getAll(filter.key)
+            : (searchParams.get(filter.key) ?? "");
+      }
     }
     const key = variantKey(spec);
     if (key && searchParams.has(key))
@@ -121,9 +126,11 @@ export function useViewPreference(
     if (view.metric) params.set("metric", view.metric);
     for (const filter of spec.filters) {
       if (filter.key === "period") continue;
-      const value = view.filters[filter.key]?.trim();
-      if (value) params.set(filter.key, value);
-      else params.delete(filter.key);
+      const values = viewFilterValues(view.filters[filter.key]);
+      params.delete(filter.key);
+      if (filter.type === "multiselect") {
+        for (const value of values) params.append(filter.key, value);
+      } else if (values[0]) params.set(filter.key, values[0]);
     }
     const key = variantKey(spec);
     if (key && view.variant) params.set(key, view.variant);

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   assignFactionColours,
   calculateWatchlistStatistics,
+  emptyWatchlistFilters,
   hasTenantFaction,
+  matchesWatchlistFilters,
   normalizeWatchedSystems,
   prioritizeFavoriteSystems,
   sortWatchlistEntries,
@@ -146,17 +148,29 @@ describe("system watchlist", () => {
         {
           requested_system: "Gamma",
           available: true,
-          system_info: { system_name: "Gamma", population: 100 },
+          system_info: {
+            system_name: "Gamma",
+            population: 100,
+            government: "$government_Democracy;",
+          },
         },
         {
           requested_system: "Alpha",
           available: true,
-          system_info: { system_name: "Alpha", population: 300 },
+          system_info: {
+            system_name: "Alpha",
+            population: 300,
+            government: "$government_Corporate;",
+          },
         },
         {
           requested_system: "Beta",
           available: true,
-          system_info: { system_name: "Beta", population: 200 },
+          system_info: {
+            system_name: "Beta",
+            population: 200,
+            government: "$government_Patronage;",
+          },
         },
       ],
     });
@@ -176,6 +190,68 @@ describe("system watchlist", () => {
         (entry) => entry.system,
       ),
     ).toEqual(["Beta", "Alpha", "Gamma"]);
+    expect(
+      sortWatchlistEntries(entries, systems, "government").map(
+        (entry) => entry.system,
+      ),
+    ).toEqual(["Beta", "Alpha", "Gamma"]);
+  });
+
+  it("filters system facts with inclusive population and date ranges", () => {
+    const entry = systemWatchlistSchema.parse({
+      systems: [
+        { system: "HIP 41318", sector: "VELA", projectName: "Velaris" },
+      ],
+    }).systems[0];
+    const [system] = normalizeWatchedSystems({
+      data: [
+        {
+          requested_system: "HIP 41318",
+          available: true,
+          system_info: {
+            system_name: "HIP 41318",
+            controlling_faction: "East India Company",
+            population: 6_800_000_000,
+            allegiance: "Empire",
+            government: "$government_Corporate;",
+            updated_at: "2026-08-29T13:14:00Z",
+          },
+        },
+      ],
+    });
+
+    expect(
+      matchesWatchlistFilters(entry, system, {
+        ...emptyWatchlistFilters,
+        system: "velar",
+        controllingFaction: "india",
+        populationMin: "6800000000",
+        populationMax: "6800000000",
+        updatedFrom: "2026-08-29",
+        updatedTo: "2026-08-29",
+        allegiance: "Empire",
+        government: "Corporate",
+        sector: "VELA",
+      }),
+    ).toBe(true);
+    expect(
+      matchesWatchlistFilters(entry, system, {
+        ...emptyWatchlistFilters,
+        populationMin: "6800000001",
+      }),
+    ).toBe(false);
+    expect(
+      matchesWatchlistFilters(entry, system, {
+        ...emptyWatchlistFilters,
+        updatedTo: "2026-08-28",
+      }),
+    ).toBe(false);
+    expect(
+      matchesWatchlistFilters(entry, system, {
+        ...emptyWatchlistFilters,
+        government: "Democracy",
+      }),
+    ).toBe(false);
   });
 
   it("assigns stable and unique colours to every faction in a system", () => {

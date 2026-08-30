@@ -3,6 +3,9 @@ export type Role = (typeof roles)[number];
 
 export const capabilities = [
   "dashboard:read",
+  "rules:write",
+  "tenant-rules:write",
+  "bgs-ai:run",
   "objectives:write",
   "reports:send",
   "assessment:run",
@@ -13,9 +16,12 @@ export const capabilities = [
 export type Capability = (typeof capabilities)[number];
 
 const grants: Record<Role, readonly Capability[]> = {
-  member: ["dashboard:read"],
+  member: ["dashboard:read", "rules:write"],
   leadership: [
     "dashboard:read",
+    "rules:write",
+    "tenant-rules:write",
+    "bgs-ai:run",
     "objectives:write",
     "reports:send",
     "assessment:run",

@@ -4,6 +4,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
   BarChart3,
+  BellRing,
   Bot,
   ChevronDown,
   Compass,
@@ -24,7 +25,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { DashboardSession } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +71,11 @@ const groups = [
         icon: ListChecks,
       },
       {
+        href: "/intelligence/alerts",
+        label: "BGS alerts",
+        icon: BellRing,
+      },
+      {
         href: "/intelligence/systems",
         label: "System intelligence",
         icon: Compass,
@@ -103,6 +109,7 @@ export function AppShell({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshed, setRefreshed] = useState("just now");
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
   const visibleGroups = groups.filter(
     (group) => !group.admin || session.role === "admin",
   );
@@ -115,6 +122,27 @@ export function AppShell({
     router.replace("/sign-in");
     router.refresh();
   };
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      void fetch("/api/bgs-alerts?limit=1", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => {
+          if (active && typeof payload?.unread_count === "number")
+            setUnreadAlerts(payload.unread_count);
+        });
+    };
+    load();
+    const interval = window.setInterval(load, 60_000);
+    window.addEventListener("valk:alerts-updated", load);
+    window.addEventListener("valk:refresh", load);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("valk:alerts-updated", load);
+      window.removeEventListener("valk:refresh", load);
+    };
+  }, []);
 
   return (
     <div className="app-frame">
@@ -166,6 +194,14 @@ export function AppShell({
                 >
                   <Icon size={18} />
                   <span>{label}</span>
+                  {href === "/intelligence/alerts" && unreadAlerts > 0 && (
+                    <b
+                      className="nav-alert-badge"
+                      aria-label={`${unreadAlerts} unread BGS alerts`}
+                    >
+                      {unreadAlerts > 99 ? "99+" : unreadAlerts}
+                    </b>
+                  )}
                 </Link>
               ))}
             </section>

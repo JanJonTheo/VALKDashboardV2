@@ -212,6 +212,200 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/dashboard/bgs/rules": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listBgsRules"];
+    put?: never;
+    post: operations["createBgsRule"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/rules/{rule_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["deleteBgsRule"];
+    options?: never;
+    head?: never;
+    patch: operations["updateBgsRule"];
+    trace?: never;
+  };
+  "/dashboard/bgs/rule-templates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listBgsRuleTemplates"];
+    put?: never;
+    post: operations["createBgsRuleTemplate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/rule-templates/{template_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateBgsRuleTemplate"];
+    trace?: never;
+  };
+  "/dashboard/bgs/rule-templates/{template_id}/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["applyBgsRuleTemplate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/rule-packages/{package_id}/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["syncBgsRulePackage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/alerts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listBgsAlerts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/alerts/{alert_id}/state": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateBgsAlertState"];
+    trace?: never;
+  };
+  "/account/discord-webhook": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getPersonalDiscordWebhookStatus"];
+    put: operations["setPersonalDiscordWebhook"];
+    post?: never;
+    delete: operations["deletePersonalDiscordWebhook"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/account/discord-webhook/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["testPersonalDiscordWebhook"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/ai-reports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listBgsAiReports"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/ai-reports/analyze": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["createBgsAiReport"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/fsdjump-factions": {
     parameters: {
       query?: never;
@@ -361,6 +555,151 @@ export interface components {
       targets?: {
         [key: string]: unknown;
       }[];
+    };
+    BgsRuleInput: {
+      name: string;
+      /** @enum {string} */
+      owner_scope: "personal" | "tenant";
+      /** @enum {string} */
+      target_scope: "system" | "watchlist_all";
+      target_system?: string | null;
+      condition_type: components["schemas"]["BgsRuleConditionType"];
+      condition?: components["schemas"]["BgsCondition"];
+      threshold_pp: number;
+      window_days: number;
+      /** @enum {string} */
+      severity: "info" | "warning" | "critical";
+      personal_discord: boolean;
+      tenant_discord: boolean;
+      enabled: boolean;
+    };
+    BgsRule: components["schemas"]["BgsRuleInput"] & {
+      /** Format: uuid */
+      id: string;
+      owner_user_id?: string | null;
+      /** Format: uuid */
+      package_id?: string | null;
+      template_id?: string | null;
+      template_version?: number | null;
+      template_item_key?: string | null;
+      /** Format: date-time */
+      effective_from?: string | null;
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    /** @enum {string} */
+    BgsRuleConditionType:
+      | "controller_below"
+      | "controller_gap"
+      | "competitor_gain"
+      | "competitor_loss"
+      | "controller_loss"
+      | "tenant_faction_loss"
+      | "tenant_faction_new_conflict"
+      | "tenant_faction_below"
+      | "tenant_faction_gap";
+    BgsCondition: {
+      type: components["schemas"]["BgsRuleConditionType"];
+      threshold_pp?: number;
+      window_days?: number;
+      /** @enum {string} */
+      comparison?: "previous_settled_tick";
+      /** @enum {string} */
+      gap_mode?: "absolute";
+      conflict_types?: ("election" | "war")[];
+    };
+    BgsRuleTemplateItem: {
+      key: string;
+      name: string;
+      condition: components["schemas"]["BgsCondition"];
+      /** @enum {string} */
+      severity: "info" | "warning" | "critical";
+    };
+    BgsRuleTemplateInput: {
+      name: string;
+      description: string;
+      default_discord: boolean;
+      archived?: boolean;
+      items: components["schemas"]["BgsRuleTemplateItem"][];
+    };
+    BgsRulePackage: {
+      /** Format: uuid */
+      id: string;
+      template_id: string;
+      template_version: number;
+      /** @enum {string} */
+      owner_scope: "personal" | "tenant";
+      owner_user_id?: string | null;
+      /** @enum {string} */
+      watchlist_scope: "personal" | "global";
+      personal_discord: boolean;
+      tenant_discord: boolean;
+      rules: components["schemas"]["BgsRule"][];
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    BgsRuleTemplate: components["schemas"]["BgsRuleTemplateInput"] & {
+      id: string;
+      version: number;
+      archived: boolean;
+      /** Format: date-time */
+      archived_at: string | null;
+      packages: components["schemas"]["BgsRulePackage"][];
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    BgsAlert: {
+      /** Format: uuid */
+      id: string;
+      rule_id?: string | null;
+      rule_name: string;
+      /** @enum {string} */
+      owner_scope: "personal" | "tenant";
+      system_name: string;
+      /** @enum {string} */
+      severity: "info" | "warning" | "critical";
+      title: string;
+      message: string;
+      facts: {
+        [key: string]: unknown;
+      };
+      event_key?: string;
+      fired_ticktime: string;
+      /** Format: date-time */
+      fired_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+      /** Format: date-time */
+      read_at?: string | null;
+      /** Format: date-time */
+      acknowledged_at?: string | null;
+    };
+    BgsAiReport: {
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      report_type: "risk" | "strategy";
+      system_name: string;
+      requested_by?: string | null;
+      tenant_faction?: string | null;
+      source_ticktime?: string | null;
+      model: string;
+      /** @enum {string} */
+      status: "completed";
+      report: {
+        [key: string]: unknown;
+      };
+      source?: {
+        [key: string]: unknown;
+      };
+      /** Format: date-time */
+      created_at: string;
     };
     Pagination: {
       page: number;
@@ -667,6 +1006,440 @@ export interface operations {
     };
     responses: {
       200: components["responses"]["DataResponse"];
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listBgsRules: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Visible personal and tenant BGS rules */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["BgsRule"][];
+            /** Format: date-time */
+            generated_at: string;
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  createBgsRule: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BgsRuleInput"];
+      };
+    };
+    responses: {
+      /** @description Created rule */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["BgsRule"];
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  deleteBgsRule: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Rule deleted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  updateBgsRule: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BgsRuleInput"];
+      };
+    };
+    responses: {
+      /** @description Updated rule */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listBgsRuleTemplates: {
+    parameters: {
+      query?: {
+        include_archived?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-local rule catalog and visible package applications */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["BgsRuleTemplate"][];
+            discord_availability: {
+              personal: boolean;
+              global: boolean;
+            };
+            can_manage_templates: boolean;
+            can_apply_global: boolean;
+            /** Format: date-time */
+            generated_at: string;
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  createBgsRuleTemplate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BgsRuleTemplateInput"];
+      };
+    };
+    responses: {
+      /** @description Created template */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  updateBgsRuleTemplate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BgsRuleTemplateInput"];
+      };
+    };
+    responses: {
+      /** @description Updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  applyBgsRuleTemplate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @enum {string} */
+          watchlist_scope: "personal" | "global";
+          discord: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Existing package */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Applied package */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  syncBgsRulePackage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        package_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Package synchronized to the current template version */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listBgsAlerts: {
+    parameters: {
+      query?: {
+        status?: "all" | "active" | "resolved";
+        scope?: "all" | "personal" | "tenant";
+        severity?: "all" | "info" | "warning" | "critical";
+        system?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Visible alerts and unread count */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["BgsAlert"][];
+            unread_count: number;
+            /** Format: date-time */
+            generated_at: string;
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  updateBgsAlertState: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        alert_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          read?: boolean;
+          acknowledged?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description User-local alert state updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  getPersonalDiscordWebhookStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Masked webhook configuration status */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  setPersonalDiscordWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uri */
+          webhook_url: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Webhook encrypted and saved */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  deletePersonalDiscordWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Webhook removed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  testPersonalDiscordWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Test message delivered */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listBgsAiReports: {
+    parameters: {
+      query?: {
+        system?: string;
+        type?: "risk" | "strategy";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-wide BGS AI report history */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["BgsAiReport"][];
+            /** Format: date-time */
+            generated_at: string;
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  createBgsAiReport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          system_name: string;
+          /** @enum {string} */
+          report_type: "risk" | "strategy";
+        };
+      };
+    };
+    responses: {
+      /** @description Structured report created and stored */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       default: components["responses"]["ErrorResponse"];
     };
   };

@@ -13,6 +13,7 @@ import {
 import {
   AlertTriangle,
   Bot,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -36,10 +37,19 @@ import type { DashboardSession } from "@/lib/access";
 import {
   colonisationCommanderGroups,
   colonisationCommodityGroups,
+  colonisationConstructionStatus,
   filterColonisationContributionGroups,
+  filterColonisationContributionRecords,
   filterColonisationConstructions,
+  groupColonisationContributionRecords,
+  includeUnattributedColonisationContributionGroups,
+  includeUnattributedColonisationContributionRecords,
+  visualAnalysisConstructions,
+  visualAnalysisContributionGroups,
   type ColonisationConstruction,
   type ColonisationContributionGroup,
+  type ColonisationContributionRecord,
+  type ColonisationFilterValues,
 } from "@/lib/colonisation";
 import {
   periodOptions,
@@ -49,21 +59,30 @@ import {
 import {
   leaderboardMetricOptions,
   type LeaderboardMetric,
+  type ViewFilterValue,
   type ViewPreference,
+  viewFilterString,
+  viewFilterValues,
 } from "@/lib/preferences";
 import { useViewPreference } from "@/lib/use-view-preference";
 import { formatValue } from "@/lib/utils";
 import { FeatureChart } from "./chart";
 import { CopyTextButton } from "./copy-text-button";
+import { DataExplorer } from "./data-explorer";
 import {
   ColonisationCommanderProgressChart,
   ColonisationCommodityGroupedTable,
   ColonisationContributionsChart,
   ColonisationContributionsTable,
+  ColonisationContributionRecordsTable,
   ColonisationGroupedTable,
   ColonisationProgressChart,
   colonisationCommanderGroupKey,
   colonisationCommodityGroupKey,
+  colonisationContributionCommanderGroupKey,
+  colonisationContributionConstructionGroupKey,
+  type ColonisationSort,
+  type ColonisationSortKey,
 } from "./colonisation-progress";
 
 interface Payload {
@@ -75,8 +94,14 @@ interface Payload {
     months?: string[];
     constructions?: ColonisationConstruction[];
     contributionGroups?: ColonisationContributionGroup[];
+    contributionRecords?: ColonisationContributionRecord[];
   };
 }
+
+const emptyColonisationConstructions: ColonisationConstruction[] = [];
+const emptyColonisationContributionGroups: ColonisationContributionGroup[] = [];
+const emptyColonisationContributionRecords: ColonisationContributionRecord[] =
+  [];
 
 async function getFeature(key: string, params: string): Promise<Payload> {
   const query = new URLSearchParams(params);
@@ -117,17 +142,97 @@ function monthLabel(value: string | undefined) {
   }).format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
-function filterValue(filter: FeatureFilter, params: URLSearchParams) {
+function filterValue(
+  filter: FeatureFilter,
+  params: URLSearchParams,
+): ViewFilterValue {
+  if (filter.type === "multiselect") return params.getAll(filter.key);
   return params.get(filter.key) ?? filter.defaultValue ?? "";
 }
 
-function filterLabel(filter: FeatureFilter, value: string) {
+function filterLabel(filter: FeatureFilter, value: ViewFilterValue) {
+  const values = viewFilterValues(value);
+  if (filter.type === "multiselect" && values.length > 1)
+    return `${values.length} selected`;
+  const selected = values[0] ?? "";
   return (
-    (filter.options?.find((option) => option.value === value)?.label ??
-      value) ||
+    (filter.options?.find((option) => option.value === selected)?.label ??
+      selected) ||
     "Any"
   );
 }
+
+function actualDataOptions(
+  values: string[],
+  emptyLabel: string,
+  currentValue: ViewFilterValue = "",
+) {
+  const unique = new Map<string, string>();
+  for (const value of [...values, ...viewFilterValues(currentValue)]) {
+    const clean = value.trim();
+    if (clean) unique.set(clean.toLowerCase(), clean);
+  }
+  return [
+    { value: "", label: emptyLabel },
+    ...[...unique.values()]
+      .sort((left, right) => left.localeCompare(right))
+      .map((value) => ({ value, label: value })),
+  ];
+}
+
+type ColonisationVariant =
+  "contributions" | "constructions" | "commodities" | "contribution-events";
+
+const colonisationSortDefaults: Record<ColonisationVariant, ColonisationSort> =
+  {
+    contributions: { key: "cmdr", direction: "asc" },
+    constructions: { key: "construction", direction: "asc" },
+    commodities: { key: "construction", direction: "asc" },
+    "contribution-events": { key: "date", direction: "asc" },
+  };
+
+const colonisationSortOptions: Record<
+  ColonisationVariant,
+  Array<{ value: ColonisationSortKey; label: string }>
+> = {
+  contributions: [
+    { value: "cmdr", label: "Commander" },
+    { value: "construction", label: "Construction" },
+    { value: "system", label: "System" },
+    { value: "commodity", label: "Commodity" },
+    { value: "status", label: "Status" },
+    { value: "delivered", label: "Delivered" },
+  ],
+  constructions: [
+    { value: "construction", label: "Construction" },
+    { value: "system", label: "System" },
+    { value: "cmdr", label: "Commander" },
+    { value: "commodity", label: "Commodity" },
+    { value: "status", label: "Status" },
+    { value: "need", label: "Need" },
+    { value: "delivered", label: "Delivered" },
+    { value: "diff", label: "Diff" },
+  ],
+  commodities: [
+    { value: "construction", label: "Construction" },
+    { value: "system", label: "System" },
+    { value: "commodity", label: "Commodity" },
+    { value: "cmdr", label: "Commander" },
+    { value: "status", label: "Status" },
+    { value: "need", label: "Need" },
+    { value: "delivered", label: "Delivered" },
+    { value: "diff", label: "Diff" },
+  ],
+  "contribution-events": [
+    { value: "date", label: "Date" },
+    { value: "construction", label: "Construction" },
+    { value: "system", label: "System" },
+    { value: "cmdr", label: "Commander" },
+    { value: "commodity", label: "Commodity" },
+    { value: "status", label: "Status" },
+    { value: "delivered", label: "Delivered" },
+  ],
+};
 
 export function FeatureDashboard({
   spec,
@@ -147,34 +252,39 @@ export function FeatureDashboard({
     null,
   );
   const [objectiveOpen, setObjectiveOpen] = useState(false);
-  const [collapsedConstructionIds, setCollapsedConstructionIds] = useState<
-    Set<string>
-  >(() => new Set());
-  const [collapsedCommanderIds, setCollapsedCommanderIds] = useState<
-    Set<string>
-  >(() => new Set());
-  const [collapsedCommodityIds, setCollapsedCommodityIds] = useState<
-    Set<string>
-  >(() => new Set());
-  const params = savedView.effectiveParams.toString();
-  const drawerFilters = spec.filters.filter(
-    (filter) => filter.placement !== "page",
-  );
-  const activeFilters = drawerFilters.filter((filter) => {
-    const value = savedView.view.filters[filter.key]?.trim();
-    return Boolean(value) && value !== filter.defaultValue;
-  });
+  const [collapsedConstructionIds, setCollapsedConstructionIds] =
+    useState<Set<string> | null>(null);
+  const [collapsedCommanderIds, setCollapsedCommanderIds] =
+    useState<Set<string> | null>(null);
+  const [collapsedCommodityIds, setCollapsedCommodityIds] =
+    useState<Set<string> | null>(null);
+  const effectiveParams = new URLSearchParams(savedView.effectiveParams);
+  if (spec.key === "colonisation")
+    for (const key of [
+      "view",
+      "cmdr",
+      "status",
+      "system",
+      "commodity",
+      "visual_limit",
+    ])
+      effectiveParams.delete(key);
+  const params = effectiveParams.toString();
   const canLoad =
     spec.key !== "systems" ||
     spec.filters.some((filter) =>
-      Boolean(savedView.effectiveParams.get(filter.key)?.trim()),
+      Boolean(
+        savedView.effectiveParams
+          .getAll(filter.key)
+          .some((value) => value.trim()),
+      ),
     );
   const queryState = useQuery({
     queryKey: ["feature", spec.key, params],
     queryFn: () => getFeature(spec.key, params),
     refetchInterval: spec.refreshMs,
     refetchIntervalInBackground: false,
-    enabled: canLoad,
+    enabled: canLoad && spec.key !== "data-explorer",
   });
 
   useEffect(() => {
@@ -232,12 +342,16 @@ export function FeatureDashboard({
     let all = queryState.data?.data ?? [];
     for (const filter of spec.filters) {
       if (!filter.field) continue;
-      const value = savedView.view.filters[filter.key]?.trim().toLowerCase();
-      if (!value) continue;
+      const values = viewFilterValues(savedView.view.filters[filter.key]).map(
+        (value) => value.toLowerCase(),
+      );
+      if (!values.length) continue;
       all = all.filter((row) =>
-        String(row[filter.field!] ?? "")
-          .toLowerCase()
-          .includes(value),
+        values.some((value) =>
+          String(row[filter.field!] ?? "")
+            .toLowerCase()
+            .includes(value),
+        ),
       );
     }
     if (spec.key === "evaluations" && savedView.view.variant === "top5") {
@@ -261,12 +375,16 @@ export function FeatureDashboard({
     spec.key,
   ]);
   const isColonisationView = spec.key === "colonisation";
-  const colonisationVariant =
-    savedView.view.variant === "constructions"
+  const requestedColonisationVariant =
+    searchParams.get("view") ?? savedView.view.variant;
+  const colonisationVariant: ColonisationVariant =
+    requestedColonisationVariant === "constructions"
       ? "constructions"
-      : savedView.view.variant === "commodities"
+      : requestedColonisationVariant === "commodities"
         ? "commodities"
-        : "contributions";
+        : requestedColonisationVariant === "contribution-events"
+          ? "contribution-events"
+          : "contributions";
   const isConstructionCommanderView =
     isColonisationView && colonisationVariant === "constructions";
   const isConstructionCommodityView =
@@ -275,48 +393,253 @@ export function FeatureDashboard({
     isConstructionCommanderView || isConstructionCommodityView;
   const isContributionView =
     isColonisationView && colonisationVariant === "contributions";
+  const isContributionRecordView =
+    isColonisationView && colonisationVariant === "contribution-events";
+  const colonisationSort = useMemo<ColonisationSort>(() => {
+    const prefix = `colonisation:${colonisationVariant}:`;
+    const entry = savedView.view.sorting.find(({ id }) =>
+      id.startsWith(prefix),
+    );
+    const key = entry?.id.slice(prefix.length) as ColonisationSortKey;
+    return colonisationSortOptions[colonisationVariant].some(
+      (option) => option.value === key,
+    )
+      ? { key, direction: entry?.desc ? "desc" : "asc" }
+      : colonisationSortDefaults[colonisationVariant];
+  }, [colonisationVariant, savedView.view.sorting]);
+  const setColonisationSort = (sort: ColonisationSort) => {
+    const prefix = `colonisation:${colonisationVariant}:`;
+    savedView.setView((current) => ({
+      ...current,
+      sorting: [
+        ...current.sorting.filter(({ id }) => !id.startsWith(prefix)),
+        {
+          id: `${prefix}${sort.key}`,
+          desc: sort.direction === "desc",
+        },
+      ],
+    }));
+  };
+  const toggleColonisationSort = (key: ColonisationSortKey) =>
+    setColonisationSort({
+      key,
+      direction:
+        colonisationSort.key === key && colonisationSort.direction === "asc"
+          ? "desc"
+          : "asc",
+    });
+  const colonisationFilters = useMemo<ColonisationFilterValues>(
+    () => ({
+      cmdr: viewFilterValues(savedView.view.filters.cmdr),
+      status: viewFilterString(savedView.view.filters.status),
+      system: viewFilterString(savedView.view.filters.system),
+      commodity: viewFilterValues(savedView.view.filters.commodity),
+      fromDate: viewFilterString(savedView.view.filters.from_date),
+      toDate: viewFilterString(savedView.view.filters.to_date),
+    }),
+    [savedView.view.filters],
+  );
+  const sourceConstructions =
+    queryState.data?.meta?.constructions ?? emptyColonisationConstructions;
+  const recordedContributionGroups =
+    queryState.data?.meta?.contributionGroups ??
+    emptyColonisationContributionGroups;
+  const recordedContributionRecords =
+    queryState.data?.meta?.contributionRecords ??
+    emptyColonisationContributionRecords;
+  const sourceContributionRecords = useMemo(
+    () =>
+      includeUnattributedColonisationContributionRecords(
+        recordedContributionRecords,
+        sourceConstructions,
+      ),
+    [recordedContributionRecords, sourceConstructions],
+  );
+  const sourceContributionGroups = useMemo(
+    () =>
+      includeUnattributedColonisationContributionGroups(
+        recordedContributionGroups,
+        sourceConstructions,
+      ),
+    [recordedContributionGroups, sourceConstructions],
+  );
   const constructions = useMemo(
     () =>
       filterColonisationConstructions(
-        queryState.data?.meta?.constructions ?? [],
+        sourceConstructions,
         query,
+        colonisationFilters,
       ),
-    [queryState.data?.meta?.constructions, query],
+    [sourceConstructions, query, colonisationFilters],
   );
   const contributionGroups = useMemo(
     () =>
       filterColonisationContributionGroups(
-        queryState.data?.meta?.contributionGroups ?? [],
+        sourceContributionGroups,
         query,
+        colonisationFilters,
       ),
-    [queryState.data?.meta?.contributionGroups, query],
+    [sourceContributionGroups, query, colonisationFilters],
+  );
+  const contributionRecords = useMemo(
+    () =>
+      filterColonisationContributionRecords(
+        sourceContributionRecords,
+        query,
+        colonisationFilters,
+      ),
+    [sourceContributionRecords, query, colonisationFilters],
+  );
+  const contributionRecordGroups = useMemo(
+    () => groupColonisationContributionRecords(contributionRecords),
+    [contributionRecords],
+  );
+  const visualLimitValue = Number(
+    viewFilterString(savedView.view.filters.visual_limit) || "5",
+  );
+  const visualLimit = [5, 10, 25].includes(visualLimitValue)
+    ? visualLimitValue
+    : 5;
+  const visualConstructions = useMemo(
+    () =>
+      visualAnalysisConstructions(
+        constructions,
+        contributionRecords,
+        visualLimit,
+      ),
+    [constructions, contributionRecords, visualLimit],
+  );
+  const visualContributionGroups = useMemo(
+    () =>
+      visualAnalysisContributionGroups(
+        contributionGroups,
+        contributionRecords,
+        visualLimit,
+      ),
+    [contributionGroups, contributionRecords, visualLimit],
   );
 
-  const toggleCollapsedValue = (
-    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
-    key: string,
-  ) => {
-    setter((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-  const collapseAllColonisationGroups = () => {
-    setCollapsedConstructionIds(
-      new Set(constructions.map((construction) => construction.id)),
+  const drawerFilters = useMemo(() => {
+    const regular = spec.filters.filter(
+      (filter) => filter.placement !== "page",
     );
-    setCollapsedCommanderIds(
-      new Set(
-        constructions.flatMap((construction) =>
+    if (!isColonisationView) return regular;
+    const cmdrs = [
+      ...sourceConstructions.flatMap((construction) =>
+        construction.commodities.flatMap((commodity) =>
+          commodity.contributors.map((contributor) => contributor.cmdr),
+        ),
+      ),
+      ...sourceContributionGroups.map((group) => group.cmdr),
+      ...sourceContributionRecords.map((record) => record.cmdr),
+    ];
+    const statuses = sourceConstructions.map((construction) =>
+      colonisationConstructionStatus(construction.status),
+    );
+    const systems = [
+      ...sourceConstructions.map((construction) => construction.system),
+      ...sourceContributionGroups.flatMap((group) =>
+        group.constructions.map((construction) => construction.system),
+      ),
+      ...sourceContributionRecords.map((record) => record.system),
+    ];
+    const commodities = [
+      ...sourceConstructions.flatMap((construction) =>
+        construction.commodities.map((commodity) => commodity.commodity),
+      ),
+      ...sourceContributionGroups.flatMap((group) =>
+        group.commodities.map((commodity) => commodity.commodity),
+      ),
+      ...sourceContributionRecords.map((record) => record.commodity),
+    ];
+    const optionValues: Record<
+      string,
+      { values: string[]; emptyLabel: string }
+    > = {
+      cmdr: { values: cmdrs, emptyLabel: "Any commander" },
+      status: { values: statuses, emptyLabel: "Any status" },
+      system: { values: systems, emptyLabel: "Any system" },
+      commodity: { values: commodities, emptyLabel: "Any commodity" },
+    };
+    return regular
+      .filter(
+        (filter) => filter.key !== "visual_limit" || !isContributionRecordView,
+      )
+      .map((filter) => {
+        if (filter.key === "period") {
+          return {
+            ...filter,
+            options: filter.options?.filter(
+              (option) => option.value !== "month-range",
+            ),
+          };
+        }
+        const dynamic = optionValues[filter.key];
+        return dynamic
+          ? {
+              ...filter,
+              options: actualDataOptions(
+                dynamic.values,
+                dynamic.emptyLabel,
+                savedView.view.filters[filter.key],
+              ),
+            }
+          : filter;
+      });
+  }, [
+    isColonisationView,
+    isContributionRecordView,
+    savedView.view.filters,
+    sourceConstructions,
+    sourceContributionGroups,
+    sourceContributionRecords,
+    spec.filters,
+  ]);
+  const activeFilters = drawerFilters.filter((filter) => {
+    const values = viewFilterValues(savedView.view.filters[filter.key]);
+    return (
+      values.length > 0 &&
+      !(values.length === 1 && values[0] === filter.defaultValue)
+    );
+  });
+
+  const allCollapsedConstructionIds = useMemo(
+    () =>
+      new Set([
+        ...constructions.map((construction) => construction.id),
+        ...contributionRecordGroups.map((construction) => construction.id),
+        ...contributionGroups.flatMap((group) =>
+          group.constructions.map((construction) =>
+            colonisationContributionConstructionGroupKey(
+              group.id,
+              construction.id,
+            ),
+          ),
+        ),
+      ]),
+    [constructions, contributionGroups, contributionRecordGroups],
+  );
+  const allCollapsedCommanderIds = useMemo(
+    () =>
+      new Set([
+        ...contributionGroups.map((group) =>
+          colonisationContributionCommanderGroupKey(group.id),
+        ),
+        ...constructions.flatMap((construction) =>
           colonisationCommanderGroups(construction).map((group) =>
             colonisationCommanderGroupKey(construction.id, group.cmdr),
           ),
         ),
-      ),
-    );
-    setCollapsedCommodityIds(
+        ...contributionRecordGroups.flatMap((construction) =>
+          construction.commanders.map((group) =>
+            colonisationCommanderGroupKey(construction.id, group.cmdr),
+          ),
+        ),
+      ]),
+    [constructions, contributionGroups, contributionRecordGroups],
+  );
+  const allCollapsedCommodityIds = useMemo(
+    () =>
       new Set(
         constructions.flatMap((construction) =>
           colonisationCommodityGroups(construction).map((group) =>
@@ -324,12 +647,41 @@ export function FeatureDashboard({
           ),
         ),
       ),
-    );
+    [constructions],
+  );
+  const effectiveCollapsedConstructionIds =
+    collapsedConstructionIds ?? allCollapsedConstructionIds;
+  const effectiveCollapsedCommanderIds =
+    collapsedCommanderIds ?? allCollapsedCommanderIds;
+  const effectiveCollapsedCommodityIds =
+    collapsedCommodityIds ?? allCollapsedCommodityIds;
+
+  const toggleCollapsedValue = (
+    setter: React.Dispatch<React.SetStateAction<Set<string> | null>>,
+    key: string,
+    defaultCollapsedIds: ReadonlySet<string>,
+  ) => {
+    setter((current) => {
+      const next = new Set(current ?? defaultCollapsedIds);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const collapseAllColonisationGroups = () => {
+    setCollapsedConstructionIds(new Set(allCollapsedConstructionIds));
+    setCollapsedCommanderIds(new Set(allCollapsedCommanderIds));
+    setCollapsedCommodityIds(new Set(allCollapsedCommodityIds));
   };
   const expandAllColonisationGroups = () => {
     setCollapsedConstructionIds(new Set());
     setCollapsedCommanderIds(new Set());
     setCollapsedCommodityIds(new Set());
+  };
+  const resetColonisationGroups = () => {
+    setCollapsedConstructionIds(null);
+    setCollapsedCommanderIds(null);
+    setCollapsedCommodityIds(null);
   };
 
   const columns = useMemo<LegacyColumnDef<Record<string, unknown>>[]>(
@@ -345,7 +697,7 @@ export function FeatureDashboard({
     data: rows,
     columns,
     state: {
-      sorting: savedView.view.sorting,
+      sorting: isColonisationView ? [] : savedView.view.sorting,
       columnVisibility: Object.fromEntries(
         effectiveSpec.columns.map((column) => [
           column.key,
@@ -399,23 +751,32 @@ export function FeatureDashboard({
     replaceParams(next);
     savedView.setView((current) => ({ ...current, variant: value }));
   };
-  const applyFilters = (values: Record<string, string>) => {
+  const applyFilters = (
+    values: Record<string, ViewFilterValue>,
+    sort?: ColonisationSort,
+  ) => {
     const next = new URLSearchParams(searchParams.toString());
     for (const filter of spec.filters) {
-      const value = values[filter.key]?.trim() ?? "";
-      if (!value || value === filter.defaultValue) next.delete(filter.key);
-      else next.set(filter.key, value);
+      const selected = viewFilterValues(values[filter.key]);
+      next.delete(filter.key);
+      if (selected.length === 1 && selected[0] === filter.defaultValue)
+        continue;
+      if (filter.type === "multiselect") {
+        for (const value of selected) next.append(filter.key, value);
+      } else if (selected[0]) next.set(filter.key, selected[0]);
     }
     next.delete("page");
     replaceParams(next);
     savedView.setView((current) => ({
       ...current,
       period:
-        spec.filters.some((filter) => filter.key === "period") && values.period
-          ? values.period
+        spec.filters.some((filter) => filter.key === "period") &&
+        viewFilterString(values.period)
+          ? viewFilterString(values.period)
           : current.period,
       filters: { ...current.filters, ...values },
     }));
+    if (sort) setColonisationSort(sort);
     setFiltersOpen(false);
   };
   const clearFilter = (filter: FeatureFilter) => {
@@ -425,7 +786,10 @@ export function FeatureDashboard({
     replaceParams(next);
     savedView.setView((current) => ({
       ...current,
-      filters: { ...current.filters, [filter.key]: "" },
+      filters: {
+        ...current.filters,
+        [filter.key]: filter.type === "multiselect" ? [] : "",
+      },
     }));
   };
   const setPage = (page: number) => {
@@ -452,6 +816,8 @@ export function FeatureDashboard({
   if (spec.capability && !session.capabilities.includes(spec.capability)) {
     return <AccessDenied />;
   }
+
+  if (spec.key === "data-explorer") return <DataExplorer />;
 
   const page = queryState.data?.pagination?.page ?? 1;
   const pageSize =
@@ -483,7 +849,8 @@ export function FeatureDashboard({
             if (change.metric) next.set("metric", change.metric);
             if (change.filters) {
               for (const [key, value] of Object.entries(change.filters)) {
-                if (value) next.set(key, value);
+                const selected = viewFilterString(value);
+                if (selected) next.set(key, selected);
                 else next.delete(key);
               }
             }
@@ -585,6 +952,7 @@ export function FeatureDashboard({
       )}
       {effectiveSpec.chart &&
         canLoad &&
+        !isContributionRecordView &&
         (isConstructionView
           ? constructions.length > 0
           : isContributionView
@@ -611,13 +979,17 @@ export function FeatureDashboard({
             {isConstructionView ? (
               isConstructionCommanderView ? (
                 <ColonisationCommanderProgressChart
-                  constructions={constructions}
+                  constructions={visualConstructions}
                 />
               ) : (
-                <ColonisationProgressChart constructions={constructions} />
+                <ColonisationProgressChart
+                  constructions={visualConstructions}
+                />
               )
             ) : isContributionView ? (
-              <ColonisationContributionsChart groups={contributionGroups} />
+              <ColonisationContributionsChart
+                groups={visualContributionGroups}
+              />
             ) : (
               <FeatureChart spec={effectiveSpec} rows={rows} />
             )}
@@ -659,7 +1031,7 @@ export function FeatureDashboard({
               openObjective={() => setObjectiveOpen(true)}
             />
             {!isColonisationView && <ColumnChooser table={table} />}
-            {isConstructionView && (
+            {isColonisationView && (
               <>
                 <button
                   className="secondary-button"
@@ -681,7 +1053,14 @@ export function FeatureDashboard({
               <button
                 className="secondary-button"
                 onClick={() => {
-                  expandAllColonisationGroups();
+                  if (isColonisationView) {
+                    const next = new URLSearchParams(searchParams.toString());
+                    next.delete("q");
+                    next.delete("page");
+                    for (const filter of spec.filters) next.delete(filter.key);
+                    replaceParams(next);
+                  }
+                  resetColonisationGroups();
                   void savedView.reset();
                 }}
               >
@@ -715,7 +1094,9 @@ export function FeatureDashboard({
             ? constructions.length === 0
             : isContributionView
               ? contributionGroups.length === 0
-              : rows.length === 0) &&
+              : isContributionRecordView
+                ? contributionRecords.length === 0
+                : rows.length === 0) &&
           !queryState.isError && (
             <p className="inline-empty">
               No records match the current API and table filters.
@@ -724,35 +1105,94 @@ export function FeatureDashboard({
         {isConstructionCommanderView ? (
           <ColonisationGroupedTable
             constructions={constructions}
-            collapsedConstructionIds={collapsedConstructionIds}
-            collapsedCommanderIds={collapsedCommanderIds}
+            sort={colonisationSort}
+            onSort={toggleColonisationSort}
+            collapsedConstructionIds={effectiveCollapsedConstructionIds}
+            collapsedCommanderIds={effectiveCollapsedCommanderIds}
             onToggleConstruction={(constructionId) =>
-              toggleCollapsedValue(setCollapsedConstructionIds, constructionId)
+              toggleCollapsedValue(
+                setCollapsedConstructionIds,
+                constructionId,
+                allCollapsedConstructionIds,
+              )
             }
             onToggleCommander={(constructionId, cmdr) =>
               toggleCollapsedValue(
                 setCollapsedCommanderIds,
                 colonisationCommanderGroupKey(constructionId, cmdr),
+                allCollapsedCommanderIds,
               )
             }
           />
         ) : isConstructionCommodityView ? (
           <ColonisationCommodityGroupedTable
             constructions={constructions}
-            collapsedConstructionIds={collapsedConstructionIds}
-            collapsedCommodityIds={collapsedCommodityIds}
+            sort={colonisationSort}
+            onSort={toggleColonisationSort}
+            collapsedConstructionIds={effectiveCollapsedConstructionIds}
+            collapsedCommodityIds={effectiveCollapsedCommodityIds}
             onToggleConstruction={(constructionId) =>
-              toggleCollapsedValue(setCollapsedConstructionIds, constructionId)
+              toggleCollapsedValue(
+                setCollapsedConstructionIds,
+                constructionId,
+                allCollapsedConstructionIds,
+              )
             }
             onToggleCommodity={(constructionId, commodityKey) =>
               toggleCollapsedValue(
                 setCollapsedCommodityIds,
                 colonisationCommodityGroupKey(constructionId, commodityKey),
+                allCollapsedCommodityIds,
               )
             }
           />
         ) : isContributionView ? (
-          <ColonisationContributionsTable groups={contributionGroups} />
+          <ColonisationContributionsTable
+            groups={contributionGroups}
+            sort={colonisationSort}
+            onSort={toggleColonisationSort}
+            collapsedCommanderIds={effectiveCollapsedCommanderIds}
+            collapsedConstructionIds={effectiveCollapsedConstructionIds}
+            onToggleCommander={(groupId) =>
+              toggleCollapsedValue(
+                setCollapsedCommanderIds,
+                colonisationContributionCommanderGroupKey(groupId),
+                allCollapsedCommanderIds,
+              )
+            }
+            onToggleConstruction={(groupId, constructionId) =>
+              toggleCollapsedValue(
+                setCollapsedConstructionIds,
+                colonisationContributionConstructionGroupKey(
+                  groupId,
+                  constructionId,
+                ),
+                allCollapsedConstructionIds,
+              )
+            }
+          />
+        ) : isContributionRecordView ? (
+          <ColonisationContributionRecordsTable
+            groups={contributionRecordGroups}
+            sort={colonisationSort}
+            onSort={toggleColonisationSort}
+            collapsedConstructionIds={effectiveCollapsedConstructionIds}
+            collapsedCommanderIds={effectiveCollapsedCommanderIds}
+            onToggleConstruction={(constructionId) =>
+              toggleCollapsedValue(
+                setCollapsedConstructionIds,
+                constructionId,
+                allCollapsedConstructionIds,
+              )
+            }
+            onToggleCommander={(constructionId, cmdr) =>
+              toggleCollapsedValue(
+                setCollapsedCommanderIds,
+                colonisationCommanderGroupKey(constructionId, cmdr),
+                allCollapsedCommanderIds,
+              )
+            }
+          />
         ) : (
           <>
             <div className="desktop-table">
@@ -850,7 +1290,9 @@ export function FeatureDashboard({
                 : `${constructions.length} constructions · ${constructions.reduce((count, construction) => count + construction.commodities.length, 0)} commodity groups · ${constructions.reduce((count, construction) => count + colonisationCommodityGroups(construction).reduce((contributionCount, group) => contributionCount + group.contributions.length, 0), 0)} Cmdr contributions`
               : isContributionView
                 ? `${contributionGroups.length} commanders · ${contributionGroups.reduce((count, group) => count + group.constructions.length, 0)} constructions · ${contributionGroups.reduce((count, group) => count + group.constructions.reduce((commodityCount, construction) => commodityCount + construction.commodities.length, 0), 0)} commodity groups`
-                : `Showing ${rows.length} of ${total} rows`}
+                : isContributionRecordView
+                  ? `${contributionRecordGroups.length} constructions · ${contributionRecordGroups.reduce((count, construction) => count + construction.commanders.length, 0)} commander groups · ${contributionRecords.length} contributions`
+                  : `Showing ${rows.length} of ${total} rows`}
           </span>
           {!isColonisationView && (
             <label className="page-size-select">
@@ -907,6 +1349,12 @@ export function FeatureDashboard({
           filters={drawerFilters}
           params={savedView.effectiveParams}
           onApply={applyFilters}
+          sort={isColonisationView ? colonisationSort : undefined}
+          sortOptions={
+            isColonisationView
+              ? colonisationSortOptions[colonisationVariant]
+              : undefined
+          }
         />
       )}
       <DetailSheet
@@ -941,7 +1389,7 @@ function LeaderboardControls({
 }: {
   period: string;
   metric: LeaderboardMetric;
-  filters: Record<string, string>;
+  filters: ViewPreference["filters"];
   onChange: (change: Partial<ViewPreference>) => void;
   onReset: () => void | Promise<void>;
 }) {
@@ -990,7 +1438,7 @@ function LeaderboardControls({
               <span>From date</span>
               <input
                 type="date"
-                value={filters.from_date ?? ""}
+                value={viewFilterString(filters.from_date)}
                 onChange={(event) =>
                   changeFilter("from_date", event.target.value)
                 }
@@ -1000,7 +1448,7 @@ function LeaderboardControls({
               <span>To date</span>
               <input
                 type="date"
-                value={filters.to_date ?? ""}
+                value={viewFilterString(filters.to_date)}
                 onChange={(event) =>
                   changeFilter("to_date", event.target.value)
                 }
@@ -1014,7 +1462,7 @@ function LeaderboardControls({
               <span>From month</span>
               <input
                 type="month"
-                value={filters.from_month ?? ""}
+                value={viewFilterString(filters.from_month)}
                 onChange={(event) =>
                   changeFilter("from_month", event.target.value)
                 }
@@ -1024,7 +1472,7 @@ function LeaderboardControls({
               <span>To month</span>
               <input
                 type="month"
-                value={filters.to_month ?? ""}
+                value={viewFilterString(filters.to_month)}
                 onChange={(event) =>
                   changeFilter("to_month", event.target.value)
                 }
@@ -1145,6 +1593,7 @@ function VariantTabs({
               ["contributions", "Contributions"],
               ["constructions", "Construction/Cmdrs"],
               ["commodities", "Construction/Commodities"],
+              ["contribution-events", "Construction/Contribution"],
             ],
           }
         : spec.key === "cz-summary"
@@ -1232,18 +1681,26 @@ function FilterSheet({
   filters,
   params,
   onApply,
+  sort,
+  sortOptions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   filters: FeatureFilter[];
   params: URLSearchParams;
-  onApply: (values: Record<string, string>) => void;
+  onApply: (
+    values: Record<string, ViewFilterValue>,
+    sort?: ColonisationSort,
+  ) => void;
+  sort?: ColonisationSort;
+  sortOptions?: Array<{ value: ColonisationSortKey; label: string }>;
 }) {
-  const [values, setValues] = useState<Record<string, string>>(() =>
+  const [values, setValues] = useState<Record<string, ViewFilterValue>>(() =>
     Object.fromEntries(
       filters.map((filter) => [filter.key, filterValue(filter, params)]),
     ),
   );
+  const [sortValue, setSortValue] = useState(sort);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -1266,45 +1723,108 @@ function FilterSheet({
             className="filter-form"
             onSubmit={(event) => {
               event.preventDefault();
-              onApply(values);
+              onApply(values, sortValue);
             }}
           >
-            {filters.map((filter) => (
-              <label key={filter.key}>
-                <span>{filter.label}</span>
-                {filter.type === "select" ? (
+            {filters.map((filter) =>
+              filter.type === "multiselect" ? (
+                <MultiSelectFilter
+                  key={filter.key}
+                  filter={filter}
+                  value={values[filter.key]}
+                  onChange={(value) =>
+                    setValues((current) => ({
+                      ...current,
+                      [filter.key]: value,
+                    }))
+                  }
+                />
+              ) : (
+                <label key={filter.key}>
+                  <span>{filter.label}</span>
+                  {filter.type === "select" ? (
+                    <select
+                      value={viewFilterString(values[filter.key])}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          [filter.key]: event.target.value,
+                        }))
+                      }
+                    >
+                      {filter.options?.map((option) => (
+                        <option
+                          value={option.value}
+                          key={option.value || "any"}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={
+                        filter.type === "number"
+                          ? "number"
+                          : filter.type === "date"
+                            ? "date"
+                            : filter.type === "month"
+                              ? "month"
+                              : "text"
+                      }
+                      value={viewFilterString(values[filter.key])}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          [filter.key]: event.target.value,
+                        }))
+                      }
+                      placeholder={
+                        filter.placeholder ??
+                        `Any ${filter.label.toLowerCase()}`
+                      }
+                    />
+                  )}
+                </label>
+              ),
+            )}
+            {sortValue && sortOptions && (
+              <div className="filter-sort-grid">
+                <label>
+                  <span>Sort by</span>
                   <select
-                    value={values[filter.key] ?? ""}
+                    value={sortValue.key}
                     onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        [filter.key]: event.target.value,
+                      setSortValue((current) => ({
+                        key: event.target.value as ColonisationSortKey,
+                        direction: current?.direction ?? "asc",
                       }))
                     }
                   >
-                    {filter.options?.map((option) => (
-                      <option value={option.value} key={option.value || "any"}>
+                    {sortOptions.map((option) => (
+                      <option value={option.value} key={option.value}>
                         {option.label}
                       </option>
                     ))}
                   </select>
-                ) : (
-                  <input
-                    type={filter.type === "number" ? "number" : "text"}
-                    value={values[filter.key] ?? ""}
+                </label>
+                <label>
+                  <span>Direction</span>
+                  <select
+                    value={sortValue.direction}
                     onChange={(event) =>
-                      setValues((current) => ({
-                        ...current,
-                        [filter.key]: event.target.value,
+                      setSortValue((current) => ({
+                        key: current?.key ?? sortOptions[0].value,
+                        direction: event.target.value as "asc" | "desc",
                       }))
                     }
-                    placeholder={
-                      filter.placeholder ?? `Any ${filter.label.toLowerCase()}`
-                    }
-                  />
-                )}
-              </label>
-            ))}
+                  >
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </select>
+                </label>
+              </div>
+            )}
             <footer>
               <Dialog.Close className="secondary-button" type="button">
                 Cancel
@@ -1317,6 +1837,67 @@ function FilterSheet({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function MultiSelectFilter({
+  filter,
+  value,
+  onChange,
+}: {
+  filter: FeatureFilter;
+  value: ViewFilterValue | undefined;
+  onChange: (value: string[]) => void;
+}) {
+  const selected = viewFilterValues(value);
+  const options = (filter.options ?? []).filter((option) => option.value);
+  const emptyLabel =
+    filter.options?.find((option) => !option.value)?.label ??
+    `Any ${filter.label.toLowerCase()}`;
+  const summary =
+    selected.length === 0
+      ? emptyLabel
+      : selected.length === 1
+        ? (options.find((option) => option.value === selected[0])?.label ??
+          selected[0])
+        : `${selected.length} selected`;
+  const labelId = `filter-${filter.key}-label`;
+
+  return (
+    <div className="filter-field filter-multiselect">
+      <span id={labelId}>{filter.label}</span>
+      <details>
+        <summary aria-labelledby={labelId}>
+          <span>{summary}</span>
+          <ChevronDown size={15} aria-hidden="true" />
+        </summary>
+        <div
+          className="filter-multiselect-menu"
+          role="group"
+          aria-labelledby={labelId}
+        >
+          <button type="button" onClick={() => onChange([])}>
+            Clear selection
+          </button>
+          {options.map((option) => (
+            <label key={option.value}>
+              <input
+                type="checkbox"
+                checked={selected.includes(option.value)}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? [...selected, option.value]
+                      : selected.filter((value) => value !== option.value),
+                  )
+                }
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </details>
+    </div>
   );
 }
 

@@ -5,6 +5,7 @@ import { createAuthClient } from "better-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import type { DashboardSession } from "@/lib/access";
 import { PasswordChangeCard } from "./password-change-card";
+import { DiscordWebhookCard } from "./discord-webhook-card";
 
 export function AccountProfile({
   session,
@@ -174,6 +175,7 @@ export function AccountProfile({
           )}
         </section>
       </div>
+      <DiscordWebhookCard />
       <PasswordChangeCard />
     </>
   );

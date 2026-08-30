@@ -37,6 +37,7 @@ export const watchlistSortOptions = [
   { value: "population", label: "Population" },
   { value: "security", label: "Security level" },
   { value: "allegiance", label: "Allegiance" },
+  { value: "government", label: "Government" },
   { value: "economy", label: "Economy" },
   { value: "updatedAt", label: "Info updated" },
 ] as const;
@@ -79,6 +80,105 @@ export interface WatchedSystem {
   updatedAt: string;
   factions: WatchedFaction[];
   conflicts: WatchedConflict[];
+}
+
+export interface WatchlistFilters {
+  system: string;
+  controllingFaction: string;
+  populationMin: string;
+  populationMax: string;
+  updatedFrom: string;
+  updatedTo: string;
+  allegiance: string;
+  government: string;
+  sector: string;
+}
+
+export const emptyWatchlistFilters: WatchlistFilters = {
+  system: "",
+  controllingFaction: "",
+  populationMin: "",
+  populationMax: "",
+  updatedFrom: "",
+  updatedTo: "",
+  allegiance: "",
+  government: "",
+  sector: "",
+};
+
+function includesFolded(value: string, search: string) {
+  return value
+    .toLocaleLowerCase("en")
+    .includes(search.trim().toLocaleLowerCase("en"));
+}
+
+function optionalFiniteNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function dateOnlyTimestamp(value: string, endOfDay = false): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = Date.parse(
+    `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`,
+  );
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function matchesWatchlistFilters(
+  entry: SystemWatchlistEntry,
+  system: WatchedSystem | undefined,
+  filters: WatchlistFilters,
+): boolean {
+  if (
+    filters.system &&
+    ![entry.system, entry.sector, entry.projectName].some((value) =>
+      includesFolded(value, filters.system),
+    )
+  )
+    return false;
+  if (
+    filters.controllingFaction &&
+    !includesFolded(
+      system?.controllingFaction ?? "",
+      filters.controllingFaction,
+    )
+  )
+    return false;
+  if (filters.sector && entry.sector !== filters.sector) return false;
+  if (filters.allegiance && system?.allegiance !== filters.allegiance)
+    return false;
+  if (filters.government && system?.government !== filters.government)
+    return false;
+
+  const populationMin = optionalFiniteNumber(filters.populationMin);
+  const populationMax = optionalFiniteNumber(filters.populationMax);
+  if (
+    populationMin !== null &&
+    (!system?.available || system.population < populationMin)
+  )
+    return false;
+  if (
+    populationMax !== null &&
+    (!system?.available || system.population > populationMax)
+  )
+    return false;
+
+  const updatedTimestamp = Date.parse(system?.updatedAt ?? "");
+  const updatedFrom = dateOnlyTimestamp(filters.updatedFrom);
+  const updatedTo = dateOnlyTimestamp(filters.updatedTo, true);
+  if (
+    updatedFrom !== null &&
+    (!Number.isFinite(updatedTimestamp) || updatedTimestamp < updatedFrom)
+  )
+    return false;
+  if (
+    updatedTo !== null &&
+    (!Number.isFinite(updatedTimestamp) || updatedTimestamp > updatedTo)
+  )
+    return false;
+  return true;
 }
 
 export interface WatchlistDistributionItem {
@@ -174,18 +274,29 @@ export function hasTenantFaction(
   system: WatchedSystem,
   tenantFactionName: string,
 ): boolean {
+  const acceptedNames = new Set(
+    tenantFactionAliases(tenantFactionName).map((name) =>
+      name.toLocaleLowerCase("en"),
+    ),
+  );
   const expected = tenantFactionName.trim().toLocaleLowerCase("en");
-  const acceptedNames = new Set([expected]);
   // The VALK Development tenant historically used the organisation label
   // "Executive" while EDDN publishes the in-game minor-faction name without it.
-  if (expected.endsWith(" executive"))
-    acceptedNames.add(expected.slice(0, -" executive".length).trim());
   return (
     Boolean(expected) &&
     system.factions.some((faction) =>
       acceptedNames.has(faction.name.trim().toLocaleLowerCase("en")),
     )
   );
+}
+
+export function tenantFactionAliases(name: string): string[] {
+  const primary = name.trim();
+  if (!primary) return [];
+  const aliases = [primary];
+  if (primary.toLocaleLowerCase("en").endsWith(" executive"))
+    aliases.push(primary.slice(0, -" executive".length).trim());
+  return [...new Set(aliases.filter(Boolean))];
 }
 
 export function prioritizeFavoriteSystems(

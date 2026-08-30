@@ -112,6 +112,19 @@ describe("Flask contract normalization", () => {
 
   it("uses Colonisation contribution records and API totals", () => {
     const result = normalizeFeaturePayload("colonisation", {
+      constructions: ["Cook Vision"],
+      construction_details: [
+        {
+          market_id: 42,
+          label: "Cook Vision",
+          status: "open",
+          target_system: "Synookoi",
+          total_need: 50,
+          total_provided: 40,
+          total_remaining: 10,
+          commodities: [],
+        },
+      ],
       groups: [
         {
           key: "janjontheo",
@@ -149,6 +162,8 @@ describe("Flask contract normalization", () => {
       ],
       records: [
         {
+          market_id: 42,
+          timestamp: "2026-08-29T22:31:42Z",
           construction: "Cook Vision",
           cmdr: "JanJonTheo",
           commodity: "Titanium",
@@ -174,6 +189,23 @@ describe("Flask contract normalization", () => {
       constructions: 1,
     });
     expect(result.meta).toMatchObject({
+      constructions: [
+        {
+          id: "42",
+          construction: "Cook Vision",
+          system: "Synookoi",
+          need: 50,
+          delivered: 40,
+          diff: 10,
+        },
+      ],
+      contributionRecords: [
+        {
+          constructionId: "42",
+          timestamp: "2026-08-29T22:31:42Z",
+          construction: "Cook Vision",
+        },
+      ],
       contributionGroups: [
         {
           id: "janjontheo",

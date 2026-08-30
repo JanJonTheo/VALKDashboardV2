@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const preferenceSchemaVersion = 1;
+export const preferenceSchemaVersion = 2;
 
 export const leaderboardMetricOptions = [
   { value: "missions", label: "Missions Completed" },
@@ -25,12 +25,17 @@ const sortingEntry = z.object({
   desc: z.boolean(),
 });
 
+const viewFilterValueSchema = z.union([
+  z.string().max(512),
+  z.array(z.string().max(512)).max(128),
+]);
+
 export const viewPreferenceSchema = z.object({
   period: z.string().max(32).optional(),
   metric: z
     .enum(leaderboardMetricOptions.map((option) => option.value))
     .optional(),
-  filters: z.record(z.string(), z.string().max(512)).default({}),
+  filters: z.record(z.string(), viewFilterValueSchema).default({}),
   variant: z.string().max(64).optional(),
   sorting: z.array(sortingEntry).max(8).default([]),
   visibleColumns: z.array(z.string().max(96)).max(64).default([]),
@@ -38,6 +43,17 @@ export const viewPreferenceSchema = z.object({
 });
 
 export type ViewPreference = z.infer<typeof viewPreferenceSchema>;
+export type ViewFilterValue = ViewPreference["filters"][string];
+
+export function viewFilterValues(value: ViewFilterValue | undefined) {
+  return (Array.isArray(value) ? value : value ? [value] : [])
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export function viewFilterString(value: ViewFilterValue | undefined) {
+  return viewFilterValues(value)[0] ?? "";
+}
 
 export function defaultViewPreference(
   viewKey: string,

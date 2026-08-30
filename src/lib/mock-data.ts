@@ -128,8 +128,262 @@ export function mockPayload(feature: FeatureKey) {
     cache: 96,
     events: 184,
   };
+  if (feature === "colonisation") {
+    const constructions = [
+      {
+        id: "42",
+        construction: "Ivaldi Foundry",
+        system: "Synookoi",
+        status: "open",
+        need: 150,
+        delivered: 80,
+        diff: 70,
+        commodities: [
+          {
+            key: "aluminium",
+            commodity: "Aluminium",
+            need: 100,
+            delivered: 70,
+            diff: 30,
+            unrecorded: 0,
+            contributors: [
+              { cmdr: "JanJonTheo", delivered: 40 },
+              { cmdr: "Valkyrie", delivered: 30 },
+            ],
+          },
+          {
+            key: "water",
+            commodity: "Water",
+            need: 50,
+            delivered: 10,
+            diff: 40,
+            unrecorded: 0,
+            contributors: [{ cmdr: "JanJonTheo", delivered: 10 }],
+          },
+        ],
+      },
+      {
+        id: "84",
+        construction: "Cook Vision",
+        system: "Col 285 Sector OS-T d3-143",
+        status: "finished",
+        need: 60,
+        delivered: 60,
+        diff: 0,
+        commodities: [
+          {
+            key: "steel",
+            commodity: "Steel",
+            need: 60,
+            delivered: 60,
+            diff: 0,
+            unrecorded: 0,
+            contributors: [{ cmdr: "Valkyrie", delivered: 60 }],
+          },
+        ],
+      },
+    ];
+    const contributionRecords = [
+      {
+        id: "101-aluminium-0",
+        eventId: "101",
+        timestamp: "2026-08-27T18:15:00Z",
+        tickId: "demo-tick-a",
+        tickTime: "2026-08-27T08:00:00Z",
+        cmdr: "JanJonTheo",
+        commodity: "Aluminium",
+        commodityKey: "aluminium",
+        delivered: 40,
+        constructionId: "42",
+        construction: "Ivaldi Foundry",
+        system: "Synookoi",
+        status: "open",
+      },
+      {
+        id: "102-water-1",
+        eventId: "102",
+        timestamp: "2026-08-27T18:45:00Z",
+        tickId: "demo-tick-a",
+        tickTime: "2026-08-27T08:00:00Z",
+        cmdr: "JanJonTheo",
+        commodity: "Water",
+        commodityKey: "water",
+        delivered: 10,
+        constructionId: "42",
+        construction: "Ivaldi Foundry",
+        system: "Synookoi",
+        status: "open",
+      },
+      {
+        id: "103-aluminium-2",
+        eventId: "103",
+        timestamp: "2026-08-28T09:10:00Z",
+        tickId: "demo-tick-b",
+        tickTime: "2026-08-28T08:00:00Z",
+        cmdr: "Valkyrie",
+        commodity: "Aluminium",
+        commodityKey: "aluminium",
+        delivered: 30,
+        constructionId: "42",
+        construction: "Ivaldi Foundry",
+        system: "Synookoi",
+        status: "open",
+      },
+      {
+        id: "104-steel-3",
+        eventId: "104",
+        timestamp: "2026-08-28T11:30:00Z",
+        tickId: "demo-tick-b",
+        tickTime: "2026-08-28T08:00:00Z",
+        cmdr: "Valkyrie",
+        commodity: "Steel",
+        commodityKey: "steel",
+        delivered: 60,
+        constructionId: "84",
+        construction: "Cook Vision",
+        system: "Col 285 Sector OS-T d3-143",
+        status: "finished",
+      },
+    ];
+    return {
+      data: contributionRecords,
+      metrics: {
+        delivered: 140,
+        required: 210,
+        commanders: 2,
+        constructions: 2,
+      },
+      generated_at: new Date().toISOString(),
+      pagination: {
+        page: 1,
+        page_size: contributionRecords.length,
+        total: contributionRecords.length,
+      },
+      meta: {
+        constructions,
+        contributionRecords,
+        contributionGroups: [
+          {
+            id: "janjontheo",
+            cmdr: "JanJonTheo",
+            delivered: 50,
+            events: 2,
+            commodities: [
+              {
+                key: "aluminium",
+                commodity: "Aluminium",
+                delivered: 40,
+                events: 1,
+              },
+              {
+                key: "water",
+                commodity: "Water",
+                delivered: 10,
+                events: 1,
+              },
+            ],
+            constructions: [
+              {
+                id: "42",
+                construction: "Ivaldi Foundry",
+                system: "Synookoi",
+                status: "open",
+                delivered: 50,
+                events: 2,
+                commodities: [
+                  {
+                    key: "aluminium",
+                    commodity: "Aluminium",
+                    delivered: 40,
+                    events: 1,
+                  },
+                  {
+                    key: "water",
+                    commodity: "Water",
+                    delivered: 10,
+                    events: 1,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            id: "valkyrie",
+            cmdr: "Valkyrie",
+            delivered: 90,
+            events: 2,
+            commodities: [
+              {
+                key: "aluminium",
+                commodity: "Aluminium",
+                delivered: 30,
+                events: 1,
+              },
+              {
+                key: "steel",
+                commodity: "Steel",
+                delivered: 60,
+                events: 1,
+              },
+            ],
+            constructions: [
+              {
+                id: "42",
+                construction: "Ivaldi Foundry",
+                system: "Synookoi",
+                status: "open",
+                delivered: 30,
+                events: 1,
+                commodities: [
+                  {
+                    key: "aluminium",
+                    commodity: "Aluminium",
+                    delivered: 30,
+                    events: 1,
+                  },
+                ],
+              },
+              {
+                id: "84",
+                construction: "Cook Vision",
+                system: "Col 285 Sector OS-T d3-143",
+                status: "finished",
+                delivered: 60,
+                events: 1,
+                commodities: [
+                  {
+                    key: "steel",
+                    commodity: "Steel",
+                    delivered: 60,
+                    events: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+  }
   if (feature === "data-explorer")
-    rows.forEach((row, index) => Object.assign(row, { id: 2481923 - index }));
+    rows.forEach((row, index) =>
+      Object.assign(row, {
+        id: 2481923 - index,
+        starsystem: row.system,
+        systemaddress: 46_148_165_328_359 + index,
+        tickid: `zoy-demo-tick-${index % 2 ? "a" : "b"}`,
+        processed: true,
+        raw_json: JSON.stringify({
+          timestamp: row.timestamp,
+          event: row.event,
+          Commander: row.cmdr,
+          StarSystem: row.system,
+          StarPos: [613.09375 + index, 31.28125, 159.875],
+          Docked: false,
+          StationFaction: { Name: row.faction },
+        }),
+      }),
+    );
   return {
     data: rows,
     metrics,

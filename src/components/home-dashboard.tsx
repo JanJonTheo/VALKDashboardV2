@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -9,29 +10,30 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  Compass,
   Database,
   Gauge,
   RefreshCw,
   ShieldAlert,
+  Swords,
   Target,
+  Timer,
+  TrendingUp,
   Users,
 } from "lucide-react";
+import { HomeActivityChart } from "@/components/home-activity-chart";
 import type { DashboardSession } from "@/lib/access";
+import {
+  formatTickCountdown,
+  getTickSchedule,
+  type HomeActivityRow,
+  type HomeMetrics,
+} from "@/lib/home";
 import { formatValue } from "@/lib/utils";
 
 interface HomePayload {
-  metrics: {
-    activeCommanders: number;
-    influence: number;
-    bountyVouchers: number;
-    openObjectives: number;
-  };
-  activity: {
-    cmdr: string;
-    actions: number;
-    missions: number;
-    influence: number;
-  }[];
+  metrics: HomeMetrics;
+  activity: HomeActivityRow[];
   objectives: {
     title?: string;
     system?: string;
@@ -39,7 +41,54 @@ interface HomePayload {
     status?: string;
   }[];
   generated_at: string;
+  last_tick: string | null;
   tenant: string;
+}
+
+function formatUtcDateTime(value: Date | null) {
+  if (!value) return "—";
+  return `${value.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  })} UTC`;
+}
+
+function TickCountdown({ nextTick }: { nextTick: Date | null }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const countdown = formatTickCountdown(nextTick, now);
+
+  return (
+    <>
+      <div className="tick-time tick-countdown">
+        <strong
+          role="timer"
+          aria-label={
+            countdown === "—"
+              ? "Time to next tick unavailable"
+              : `Time to next tick: ${countdown}`
+          }
+        >
+          {countdown}
+        </strong>
+      </div>
+      <small>
+        {countdown.startsWith("Overdue")
+          ? "MINUTES SINCE ESTIMATED TICK"
+          : "HOURS : MINUTES"}
+      </small>
+    </>
+  );
 }
 
 async function getHome(): Promise<HomePayload> {
@@ -75,8 +124,26 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
     {
       label: "Bounty vouchers",
       value: data?.metrics.bountyVouchers,
-      detail: "Redeemed in the current tick",
+      detail: "Credits redeemed in the current tick",
       icon: Database,
+    },
+    {
+      label: "Exploration sales",
+      value: data?.metrics.explorationSales,
+      detail: "Credits sold in the current tick",
+      icon: Compass,
+    },
+    {
+      label: "Combat bonds",
+      value: data?.metrics.combatBonds,
+      detail: "Credits redeemed in the current tick",
+      icon: Swords,
+    },
+    {
+      label: "Trade volume",
+      value: data?.metrics.tradeVolume,
+      detail: "Credits traded in the current tick",
+      icon: TrendingUp,
     },
     {
       label: "Open objectives",
@@ -85,11 +152,8 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
       icon: Target,
     },
   ];
-  const maximumActivity = Math.max(
-    1,
-    ...(data?.activity.map((item) => item.actions) ?? []),
-  );
   const generatedAt = data?.generated_at ? new Date(data.generated_at) : null;
+  const tickSchedule = getTickSchedule(data?.last_tick);
 
   return (
     <>
@@ -150,33 +214,14 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
           <div className="section-heading">
             <div>
               <p className="eyebrow">ACTIVITY</p>
-              <h2>Recorded actions this tick</h2>
+              <h2>Contribution share by commander</h2>
             </div>
             <Link href="/analytics/leaderboard?period=ct">
               Full analytics <ArrowRight size={13} />
             </Link>
           </div>
           {data?.activity.length ? (
-            <>
-              <div className="home-chart">
-                {data.activity.slice(0, 12).map((item) => (
-                  <div key={item.cmdr} title={`${item.cmdr}: ${item.actions}`}>
-                    <i
-                      style={{
-                        height: `${Math.max(3, (item.actions / maximumActivity) * 100)}%`,
-                      }}
-                    />
-                    <span>{item.cmdr.slice(0, 8)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="home-chart-legend">
-                <span>
-                  <i />
-                  Missions and influence entries
-                </span>
-              </div>
-            </>
+            <HomeActivityChart rows={data.activity} totals={data.metrics} />
           ) : (
             <p className="inline-empty">
               No commander activity is recorded for the current tick.
@@ -184,28 +229,64 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
           )}
         </article>
 
-        <article className="surface tick-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">DATA SNAPSHOT</p>
-              <h2>Last tenant refresh</h2>
+        <div className="tick-card-stack">
+          <article className="surface tick-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">DATA SNAPSHOT</p>
+                <h2>Last tenant refresh</h2>
+              </div>
+              <Clock3 size={17} />
             </div>
-            <Clock3 size={17} />
-          </div>
-          <div className="tick-time">
-            <strong>
-              {generatedAt
-                ? generatedAt.toLocaleTimeString("en-GB", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: "UTC",
-                  })
-                : "—"}
-            </strong>
-          </div>
-          <small>UTC · SMART REFRESH EVERY 60 SECONDS</small>
-          <p>All values above use explicit current-tick API filters.</p>
-        </article>
+            <div className="tick-time">
+              <strong>
+                {generatedAt
+                  ? generatedAt.toLocaleTimeString("en-GB", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "UTC",
+                    })
+                  : "—"}
+              </strong>
+            </div>
+            <small>UTC · SMART REFRESH EVERY 60 SECONDS</small>
+            <p>All values above use explicit current-tick API filters.</p>
+          </article>
+
+          <article className="surface tick-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">TICK TIMER</p>
+                <h2>Time to next tick</h2>
+              </div>
+              <Timer size={17} />
+            </div>
+            <TickCountdown nextTick={tickSchedule.estimatedNextTick} />
+            <div className="tick-schedule" aria-label="Galaxy tick schedule">
+              <div>
+                <span>Last tick</span>
+                {tickSchedule.lastTick ? (
+                  <time dateTime={tickSchedule.lastTick.toISOString()}>
+                    {formatUtcDateTime(tickSchedule.lastTick)}
+                  </time>
+                ) : (
+                  <time>—</time>
+                )}
+              </div>
+              <div>
+                <span>Est. next tick</span>
+                {tickSchedule.estimatedNextTick ? (
+                  <time dateTime={tickSchedule.estimatedNextTick.toISOString()}>
+                    {formatUtcDateTime(tickSchedule.estimatedNextTick)}
+                  </time>
+                ) : (
+                  <time>—</time>
+                )}
+              </div>
+            </div>
+            <p>Next tick estimate = last observed tick + 24 hours.</p>
+          </article>
+        </div>
 
         <article className="surface home-objectives">
           <div className="section-heading">

@@ -8,6 +8,7 @@ export async function flaskRequest(
   path: string,
   request: Request,
   session: DashboardSession,
+  timeoutMs = 20_000,
 ): Promise<Response> {
   const base = process.env.FLASK_API_BASE_URL;
   if (!base) throw new Error("FLASK_API_BASE_URL is not configured");
@@ -62,7 +63,7 @@ export async function flaskRequest(
     headers,
     body,
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const responseHeaders = new Headers({
     "content-type": "application/json",

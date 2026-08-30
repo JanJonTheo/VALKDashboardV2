@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import { flaskRequest } from "@/lib/flask";
+import { summarizeHomeLeaderboard } from "@/lib/home";
 import { normalizeFeaturePayload } from "@/lib/normalize";
 import { AccessError, requireDashboardSession } from "@/lib/session";
 
 type Row = Record<string, unknown>;
 
-function number(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
+const GALAXY_TICK_URL =
+  process.env.GALAXY_TICK_URL ?? "http://tick.infomancer.uk/galtick.json";
 
 function requestWithQuery(request: Request, query: Record<string, string>) {
   const url = new URL(request.url);
@@ -23,6 +22,24 @@ async function rows(response: Response): Promise<Row[]> {
   return Array.isArray(body.data) ? (body.data as Row[]) : [];
 }
 
+async function getLastGalaxyTick() {
+  try {
+    const response = await fetch(GALAXY_TICK_URL, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(2_500),
+    });
+    if (!response.ok) return null;
+
+    const body = (await response.json()) as { lastGalaxyTick?: unknown };
+    if (typeof body.lastGalaxyTick !== "string") return null;
+
+    const lastTick = body.lastGalaxyTick.trim();
+    return lastTick && Number.isFinite(Date.parse(lastTick)) ? lastTick : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   const correlation = crypto.randomUUID();
   try {
@@ -30,33 +47,54 @@ export async function GET(request: Request) {
     const demo =
       !process.env.FLASK_API_BASE_URL || process.env.VALK_DEMO_MODE === "true";
     if (demo) {
+      const lastTick = await getLastGalaxyTick();
       return NextResponse.json({
         metrics: {
-          activeCommanders: 8,
+          activeCommanders: 3,
           influence: 126,
           bountyVouchers: 184_200_000,
+          explorationSales: 114_000_000,
+          combatBonds: 123_000_000,
+          tradeVolume: 720_000_000,
           openObjectives: 6,
         },
         activity: [
-          { cmdr: "Valkyrie", actions: 32 },
-          { cmdr: "Astra Nyx", actions: 24 },
-          { cmdr: "Rooke", actions: 18 },
+          {
+            cmdr: "Valkyrie",
+            influence: 64,
+            bountyVouchers: 80_000_000,
+            explorationSales: 24_000_000,
+            combatBonds: 42_000_000,
+            tradeVolume: 210_000_000,
+          },
+          {
+            cmdr: "Astra Nyx",
+            influence: 38,
+            bountyVouchers: 56_000_000,
+            explorationSales: 75_000_000,
+            combatBonds: 18_000_000,
+            tradeVolume: 340_000_000,
+          },
+          {
+            cmdr: "Rooke",
+            influence: 24,
+            bountyVouchers: 48_200_000,
+            explorationSales: 15_000_000,
+            combatBonds: 63_000_000,
+            tradeVolume: 170_000_000,
+          },
         ],
         objectives: [],
         generated_at: new Date().toISOString(),
+        last_tick: lastTick,
         tenant: session.tenant.name,
       });
     }
 
-    const [leaderboardResponse, voucherResponse, objectiveResponse] =
+    const [leaderboardResponse, objectiveResponse, lastTick] =
       await Promise.all([
         flaskRequest(
           "summary/leaderboard",
-          requestWithQuery(request, { period: "ct" }),
-          session,
-        ),
-        flaskRequest(
-          "bounty-vouchers",
           requestWithQuery(request, { period: "ct" }),
           session,
         ),
@@ -65,45 +103,32 @@ export async function GET(request: Request) {
           requestWithQuery(request, { active: "true" }),
           session,
         ),
+        getLastGalaxyTick(),
       ]);
 
-    const [leaderboard, vouchers, objectives] = await Promise.all([
+    const [leaderboard, objectives] = await Promise.all([
       rows(leaderboardResponse),
-      rows(voucherResponse),
       rows(objectiveResponse),
     ]);
+    const normalizedLeaderboard = normalizeFeaturePayload("leaderboard", {
+      data: leaderboard,
+    }).data;
+    const homeLeaderboard = summarizeHomeLeaderboard(normalizedLeaderboard);
     const normalizedObjectives = normalizeFeaturePayload("objectives", {
       data: objectives,
     }).data;
-    const activeCommanders = new Set(
-      leaderboard.map((row) => String(row.cmdr ?? "").trim()).filter(Boolean),
-    ).size;
 
     return NextResponse.json(
       {
         metrics: {
-          activeCommanders,
-          influence: leaderboard.reduce(
-            (total, row) => total + number(row.influence_eic),
-            0,
-          ),
-          bountyVouchers: vouchers.reduce(
-            (total, row) => total + number(row.amount),
-            0,
-          ),
+          activeCommanders: homeLeaderboard.activeCommanders,
+          ...homeLeaderboard.metrics,
           openObjectives: normalizedObjectives.length,
         },
-        activity: leaderboard.map((row) => ({
-          cmdr: row.cmdr,
-          actions:
-            number(row.missions_completed) +
-            number(row.missions_failed) +
-            number(row.influence_eic),
-          missions: number(row.missions_completed),
-          influence: number(row.influence_eic),
-        })),
+        activity: homeLeaderboard.activity,
         objectives: normalizedObjectives.slice(0, 3),
         generated_at: new Date().toISOString(),
+        last_tick: lastTick,
         tenant: session.tenant.name,
       },
       { headers: { "x-correlation-id": correlation } },

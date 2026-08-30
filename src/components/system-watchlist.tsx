@@ -8,7 +8,9 @@ import {
   Activity,
   AlertTriangle,
   ArrowDownUp,
+  BellRing,
   Building2,
+  Check,
   ChartColumn,
   ChevronLeft,
   ChevronRight,
@@ -17,12 +19,12 @@ import {
   Factory,
   Flag,
   History,
+  ListFilter,
   MapPin,
   Map as MapIcon,
   Orbit,
   Plus,
   RefreshCw,
-  Search,
   Shield,
   ShieldCheck,
   Star,
@@ -45,7 +47,9 @@ import {
 import {
   assignFactionColours,
   calculateWatchlistStatistics,
+  emptyWatchlistFilters,
   hasTenantFaction,
+  matchesWatchlistFilters,
   normalizeWatchedSystems,
   sortWatchlistEntries,
   systemWatchlistEntrySchema,
@@ -55,10 +59,19 @@ import {
   type WatchlistFacilityStatistics,
   type WatchlistStatistics,
   type WatchlistSortField,
+  type WatchlistFilters,
   type WatchedFaction,
   type WatchedSystem,
 } from "@/lib/system-watchlist";
+import {
+  globalWatchlistPageSize,
+  globalWatchlistSortOptions,
+  type GlobalWatchlistFilterOption,
+  type GlobalWatchlistSortField,
+} from "@/lib/global-system-watchlist";
 import { CopyTextButton } from "@/components/copy-text-button";
+import { BgsAiPanel } from "@/components/bgs-ai-panel";
+import { BgsRuleManager } from "@/components/bgs-rule-manager";
 
 interface WatchlistPayload {
   watchlist: SystemWatchlistEntry[];
@@ -71,7 +84,46 @@ interface SortPreferenceEnvelope {
   data: { payload?: { sorting?: { id?: string; desc?: boolean }[] } } | null;
 }
 
+type WatchlistScope = "personal" | "global";
+
+interface GlobalWatchlistPayload {
+  systems: WatchedSystem[];
+  generatedAt: string;
+  pagination: { page: number; pageSize: number; total: number };
+  filterOptions: {
+    allegiances: GlobalWatchlistFilterOption[];
+    governments: GlobalWatchlistFilterOption[];
+  };
+}
+
 const watchlistSortPreferenceKey = "bgs-system-watchlist-sort";
+
+const superpowerIconSources: Record<string, string> = {
+  alliance: "/superpowers/alliance.svg",
+  empire: "/superpowers/empire.svg",
+  federation: "/superpowers/federation.svg",
+  independent: "/superpowers/independent.webp",
+};
+
+function superpowerIconSource(allegiance: string) {
+  return superpowerIconSources[allegiance.trim().toLowerCase()];
+}
+
+function filterOptionValues(
+  systems: WatchedSystem[],
+  field: "allegiance" | "government",
+): GlobalWatchlistFilterOption[] {
+  return [...new Set(systems.map((system) => system[field]).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, "en"))
+    .map((value) => ({ value, label: value }));
+}
+
+function activeFilterCount(filters: WatchlistFilters, scope: WatchlistScope) {
+  return Object.entries(filters).filter(
+    ([key, value]) =>
+      Boolean(value) && (scope === "personal" || key !== "sector"),
+  ).length;
+}
 
 async function loadWatchlistSortPreference(): Promise<SortPreferenceEnvelope> {
   const response = await fetch(
@@ -167,6 +219,66 @@ async function saveWatchlist(systems: SystemWatchlistEntry[]) {
     );
 }
 
+async function loadGlobalWatchlist(
+  page: number,
+  sortField: GlobalWatchlistSortField,
+  sortDescending: boolean,
+  filters: WatchlistFilters,
+): Promise<GlobalWatchlistPayload> {
+  const parameters = new URLSearchParams({
+    page: String(page),
+    sort: sortField,
+    direction: sortDescending ? "desc" : "asc",
+  });
+  const optionalParameters: Record<string, string> = {
+    system: filters.system,
+    controlling_faction: filters.controllingFaction,
+    population_min: filters.populationMin,
+    population_max: filters.populationMax,
+    updated_from: filters.updatedFrom,
+    updated_to: filters.updatedTo,
+    allegiance: filters.allegiance,
+    government: filters.government,
+  };
+  Object.entries(optionalParameters).forEach(([key, value]) => {
+    if (value) parameters.set(key, value);
+  });
+  const response = await fetch(`/api/system-watchlist/global?${parameters}`, {
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (!response.ok)
+    throw new Error(
+      ((payload?.error as { message?: string } | undefined)?.message as
+        string | undefined) ?? "The global BGS watchlist is unavailable",
+    );
+  const pagination = (payload?.pagination ?? {}) as Record<string, unknown>;
+  const filterOptions = (payload?.filter_options ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    systems: normalizeWatchedSystems(payload),
+    generatedAt: String(payload?.generated_at ?? new Date().toISOString()),
+    pagination: {
+      page: Number(pagination.page) || page,
+      pageSize: Number(pagination.page_size) || globalWatchlistPageSize,
+      total: Number(pagination.total) || 0,
+    },
+    filterOptions: {
+      allegiances: Array.isArray(filterOptions.allegiances)
+        ? (filterOptions.allegiances as GlobalWatchlistFilterOption[])
+        : [],
+      governments: Array.isArray(filterOptions.governments)
+        ? (filterOptions.governments as GlobalWatchlistFilterOption[])
+        : [],
+    },
+  };
+}
+
 async function loadStations(system: string): Promise<StationPayload> {
   const parameters = new URLSearchParams({ system });
   const response = await fetch(`/api/system-watchlist/stations?${parameters}`, {
@@ -193,17 +305,20 @@ async function loadStations(system: string): Promise<StationPayload> {
 type FactionFillStyle = CSSProperties & {
   "--faction-colour": string;
   "--faction-fill": string;
+  "--superpower-icon"?: string;
 };
 
-function factionFillStyle(
-  faction: Pick<WatchedFaction, "influence">,
+export function factionFillStyle(
+  faction: Pick<WatchedFaction, "influence" | "allegiance">,
   colour: string,
 ): FactionFillStyle {
   const influence = Math.min(100, Math.max(0, faction.influence));
+  const icon = superpowerIconSource(faction.allegiance);
   return {
     borderLeftColor: colour,
     "--faction-colour": colour,
     "--faction-fill": `${influence}%`,
+    ...(icon ? { "--superpower-icon": `url("${icon}")` } : {}),
   };
 }
 
@@ -774,10 +889,12 @@ function SystemRecordDetail({
   system,
   open,
   onOpenChange,
+  canRunBgsAi,
 }: {
   system: WatchedSystem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canRunBgsAi: boolean;
 }) {
   const colours = assignFactionColours(system.factions);
   const [mapOpen, setMapOpen] = useState(false);
@@ -974,6 +1091,7 @@ function SystemRecordDetail({
             </header>
             <InfluenceHistoryChart factions={system.factions} />
           </section>
+          <BgsAiPanel system={system.name} canRun={canRunBgsAi} />
           <footer>
             <Dialog.Close className="primary-button">Done</Dialog.Close>
           </footer>
@@ -1184,19 +1302,31 @@ function FactionRail({
 }
 
 export function SystemStrip({
+  scope,
   entry,
   system,
   tenantFactionName,
   saving,
   onToggleFavorite,
   onDelete,
+  onAddToPersonal,
+  alreadyPersonal = false,
+  personalWatchlistFull = false,
+  onCreateRule,
+  canRunBgsAi,
 }: {
+  scope: WatchlistScope;
   entry: SystemWatchlistEntry;
   system: WatchedSystem;
   tenantFactionName: string;
   saving: boolean;
-  onToggleFavorite: () => void;
-  onDelete: () => void;
+  onToggleFavorite?: () => void;
+  onDelete?: () => void;
+  onAddToPersonal?: () => void;
+  alreadyPersonal?: boolean;
+  personalWatchlistFull?: boolean;
+  onCreateRule: () => void;
+  canRunBgsAi: boolean;
 }) {
   const [activeFaction, setActiveFaction] = useState<string>();
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1282,22 +1412,59 @@ export function SystemStrip({
         <div className="watch-system-actions">
           <button
             type="button"
-            className="watch-favorite-button"
-            data-favorite={entry.favorite || undefined}
-            onClick={onToggleFavorite}
-            disabled={saving}
-            aria-pressed={entry.favorite}
-            aria-label={`${entry.favorite ? "Remove" : "Add"} ${entry.system} ${entry.favorite ? "from" : "to"} favorites`}
-            title={
-              entry.favorite ? "Remove from favorites" : "Add to favorites"
-            }
+            className="watch-rule-button"
+            onClick={onCreateRule}
+            aria-label={`Create an alert rule for ${entry.system}`}
+            title="Create alert rule"
           >
-            <Star
-              size={14}
-              fill={entry.favorite ? "currentColor" : "none"}
-              aria-hidden="true"
-            />
+            <BellRing size={14} aria-hidden="true" />
           </button>
+          {scope === "personal" ? (
+            <button
+              type="button"
+              className="watch-favorite-button"
+              data-favorite={entry.favorite || undefined}
+              onClick={onToggleFavorite}
+              disabled={saving}
+              aria-pressed={entry.favorite}
+              aria-label={`${entry.favorite ? "Remove" : "Add"} ${entry.system} ${entry.favorite ? "from" : "to"} favorites`}
+              title={
+                entry.favorite ? "Remove from favorites" : "Add to favorites"
+              }
+            >
+              <Star
+                size={14}
+                fill={entry.favorite ? "currentColor" : "none"}
+                aria-hidden="true"
+              />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="watch-add-personal-button"
+              data-added={alreadyPersonal || undefined}
+              onClick={onAddToPersonal}
+              disabled={saving || alreadyPersonal || personalWatchlistFull}
+              aria-label={
+                alreadyPersonal
+                  ? `${entry.system} is already on your personal watchlist`
+                  : `Add ${entry.system} to your personal watchlist`
+              }
+              title={
+                alreadyPersonal
+                  ? "Already on your personal watchlist"
+                  : personalWatchlistFull
+                    ? "Your personal watchlist already contains 100 systems"
+                    : "Add to personal watchlist"
+              }
+            >
+              {alreadyPersonal ? (
+                <Check size={14} aria-hidden="true" />
+              ) : (
+                <Plus size={14} aria-hidden="true" />
+              )}
+            </button>
+          )}
           <Link
             href={`/intelligence/systems?system=${encodeURIComponent(entry.system)}`}
             aria-label={`Open full system information for ${entry.system}`}
@@ -1325,16 +1492,18 @@ export function SystemStrip({
               <History size={14} aria-hidden="true" />
             </button>
           )}
-          <button
-            type="button"
-            className="watch-delete-button"
-            onClick={onDelete}
-            disabled={saving}
-            aria-label={`Remove ${entry.system} from the watchlist`}
-            title="Remove from watchlist"
-          >
-            <Trash2 size={13} />
-          </button>
+          {scope === "personal" && (
+            <button
+              type="button"
+              className="watch-delete-button"
+              onClick={onDelete}
+              disabled={saving}
+              aria-label={`Remove ${entry.system} from the watchlist`}
+              title="Remove from watchlist"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       </header>
       {system.available && (
@@ -1348,6 +1517,7 @@ export function SystemStrip({
         system={system}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        canRunBgsAi={canRunBgsAi}
       />
       <EdgisSystemMapDialog
         system={system.name}
@@ -1464,16 +1634,218 @@ function AddSystemDialog({
   );
 }
 
-export function SystemWatchlist({
-  tenantFactionName,
+function WatchlistFilterSheet({
+  open,
+  onOpenChange,
+  scope,
+  filters,
+  sectors,
+  allegianceOptions,
+  governmentOptions,
+  onApply,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  scope: WatchlistScope;
+  filters: WatchlistFilters;
+  sectors: string[];
+  allegianceOptions: GlobalWatchlistFilterOption[];
+  governmentOptions: GlobalWatchlistFilterOption[];
+  onApply: (filters: WatchlistFilters) => void;
+}) {
+  const [draft, setDraft] = useState(filters);
+  const update = (field: keyof WatchlistFilters, value: string) =>
+    setDraft((current) => ({ ...current, [field]: value }));
+
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setDraft(filters);
+        onOpenChange(nextOpen);
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="sheet-content watchlist-filter-sheet">
+          <div className="sheet-heading">
+            <div>
+              <Dialog.Title>
+                Filter {scope === "personal" ? "personal" : "global"} watchlist
+              </Dialog.Title>
+              <Dialog.Description>
+                Filters apply to the current system facts. Empty fields include
+                every value.
+              </Dialog.Description>
+            </div>
+            <Dialog.Close aria-label="Close watchlist filters">
+              <X size={19} />
+            </Dialog.Close>
+          </div>
+          <form
+            className="filter-form watchlist-filter-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onApply(draft);
+              onOpenChange(false);
+            }}
+          >
+            <label>
+              <span>System name</span>
+              <input
+                value={draft.system}
+                onChange={(event) => update("system", event.target.value)}
+                placeholder={
+                  scope === "personal"
+                    ? "System, sector or project"
+                    : "System name contains…"
+                }
+              />
+            </label>
+            <label>
+              <span>Controlling minor faction</span>
+              <input
+                value={draft.controllingFaction}
+                onChange={(event) =>
+                  update("controllingFaction", event.target.value)
+                }
+                placeholder="Faction name contains…"
+              />
+            </label>
+            <div className="watchlist-filter-range">
+              <label>
+                <span>Population from</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={draft.populationMin}
+                  onChange={(event) =>
+                    update("populationMin", event.target.value)
+                  }
+                  placeholder="No minimum"
+                />
+              </label>
+              <label>
+                <span>Population to</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={draft.populationMax}
+                  onChange={(event) =>
+                    update("populationMax", event.target.value)
+                  }
+                  placeholder="No maximum"
+                />
+              </label>
+            </div>
+            <div className="watchlist-filter-range">
+              <label>
+                <span>Updated from</span>
+                <input
+                  type="date"
+                  value={draft.updatedFrom}
+                  onChange={(event) =>
+                    update("updatedFrom", event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                <span>Updated to</span>
+                <input
+                  type="date"
+                  value={draft.updatedTo}
+                  onChange={(event) => update("updatedTo", event.target.value)}
+                />
+              </label>
+            </div>
+            <label>
+              <span>Allegiance</span>
+              <select
+                value={draft.allegiance}
+                onChange={(event) => update("allegiance", event.target.value)}
+              >
+                <option value="">All allegiances</option>
+                {allegianceOptions.map((option) => (
+                  <option value={option.value} key={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Government</span>
+              <select
+                value={draft.government}
+                onChange={(event) => update("government", event.target.value)}
+              >
+                <option value="">All governments</option>
+                {governmentOptions.map((option) => (
+                  <option value={option.value} key={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {scope === "personal" && (
+              <label>
+                <span>Sector</span>
+                <select
+                  value={draft.sector}
+                  onChange={(event) => update("sector", event.target.value)}
+                >
+                  <option value="">All sectors</option>
+                  {sectors.map((sector) => (
+                    <option value={sector} key={sector}>
+                      {sector}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <footer>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setDraft({ ...emptyWatchlistFilters })}
+              >
+                Reset
+              </button>
+              <Dialog.Close asChild>
+                <button className="secondary-button" type="button">
+                  Cancel
+                </button>
+              </Dialog.Close>
+              <button className="primary-button" type="submit">
+                Apply filters
+              </button>
+            </footer>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function PersonalSystemWatchlist({
+  active,
+  tenantFactionName,
+  canManageTenantRules,
+  canRunBgsAi,
+}: {
+  active: boolean;
   tenantFactionName: string;
+  canManageTenantRules: boolean;
+  canRunBgsAi: boolean;
 }) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [statisticsOpen, setStatisticsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [sector, setSector] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [ruleSystem, setRuleSystem] = useState<string>();
+  const [filters, setFilters] = useState<WatchlistFilters>({
+    ...emptyWatchlistFilters,
+  });
   const [sortField, setSortField] = useState<WatchlistSortField>("system");
   const [sortDescending, setSortDescending] = useState(false);
   const [sortReady, setSortReady] = useState(false);
@@ -1486,7 +1858,7 @@ export function SystemWatchlist({
   const query = useQuery({
     queryKey: ["system-watchlist-data"],
     queryFn: loadWatchlist,
-    refetchInterval: 60_000,
+    refetchInterval: active ? 60_000 : false,
     refetchIntervalInBackground: false,
   });
   useEffect(() => {
@@ -1574,20 +1946,26 @@ export function SystemWatchlist({
     [watchlist],
   );
   const filtered = sortWatchlistEntries(
-    watchlist.filter((entry) => {
-      const needle = search.trim().toLocaleLowerCase("en");
-      const matchesSearch =
-        !needle ||
-        [entry.system, entry.sector, entry.projectName].some((value) =>
-          value.toLocaleLowerCase("en").includes(needle),
-        );
-      return matchesSearch && (!sector || entry.sector === sector);
-    }),
+    watchlist.filter((entry) =>
+      matchesWatchlistFilters(
+        entry,
+        systemMap.get(entry.system.toLocaleLowerCase("en")),
+        filters,
+      ),
+    ),
     query.data?.systems ?? [],
     sortField,
     sortDescending,
   );
   const favoriteCount = watchlist.filter((entry) => entry.favorite).length;
+  const allegianceOptions = useMemo(
+    () => filterOptionValues(query.data?.systems ?? [], "allegiance"),
+    [query.data?.systems],
+  );
+  const governmentOptions = useMemo(
+    () => filterOptionValues(query.data?.systems ?? [], "government"),
+    [query.data?.systems],
+  );
   const statistics = useMemo(
     () =>
       calculateWatchlistStatistics(
@@ -1620,6 +1998,15 @@ export function SystemWatchlist({
           >
             <RefreshCw className={query.isFetching ? "spin" : ""} size={15} />
             Refresh
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setRuleSystem(undefined);
+              setRulesOpen(true);
+            }}
+          >
+            <BellRing size={15} /> Rules
           </button>
           <small>
             {query.data?.generatedAt
@@ -1660,29 +2047,17 @@ export function SystemWatchlist({
             </span>
           )}
         </div>
-        <label className="search-box">
-          <Search size={15} />
-          <span className="sr-only">Search your system watchlist</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="System, sector or project…"
-          />
-        </label>
-        <label className="watchlist-sector-filter">
-          <span className="sr-only">Filter by sector</span>
-          <select
-            value={sector}
-            onChange={(event) => setSector(event.target.value)}
-          >
-            <option value="">All sectors</option>
-            {sectors.map((value) => (
-              <option value={value} key={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
+        <button
+          type="button"
+          className="watchlist-filter-button"
+          onClick={() => setFilterOpen(true)}
+        >
+          <ListFilter size={14} aria-hidden="true" />
+          Filters
+          {activeFilterCount(filters, "personal") > 0 && (
+            <span>{activeFilterCount(filters, "personal")}</span>
+          )}
+        </button>
         <div className="watchlist-sort-controls">
           <label>
             <span className="sr-only">Sort monitored systems by</span>
@@ -1766,11 +2141,17 @@ export function SystemWatchlist({
           };
           return (
             <SystemStrip
+              scope="personal"
               key={entry.system.toLocaleLowerCase("en")}
               entry={entry}
               system={system}
               tenantFactionName={tenantFactionName}
               saving={mutation.isPending}
+              canRunBgsAi={canRunBgsAi}
+              onCreateRule={() => {
+                setRuleSystem(entry.system);
+                setRulesOpen(true);
+              }}
               onToggleFavorite={() =>
                 mutation.mutate(
                   watchlist.map((candidate) =>
@@ -1802,11 +2183,392 @@ export function SystemWatchlist({
         saving={mutation.isPending}
         onAdd={(entry) => mutation.mutate([...watchlist, entry])}
       />
+      <WatchlistFilterSheet
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+        scope="personal"
+        filters={filters}
+        sectors={sectors}
+        allegianceOptions={allegianceOptions}
+        governmentOptions={governmentOptions}
+        onApply={setFilters}
+      />
       <WatchlistStatisticsDialog
         statistics={statistics}
         open={statisticsOpen}
         onOpenChange={setStatisticsOpen}
       />
+      <BgsRuleManager
+        key={`${ruleSystem ?? "global"}-${rulesOpen ? "open" : "closed"}`}
+        open={rulesOpen}
+        onOpenChange={setRulesOpen}
+        initialSystem={ruleSystem}
+        systems={watchlist.map((entry) => entry.system)}
+        canManageTenant={canManageTenantRules}
+      />
+    </>
+  );
+}
+
+function GlobalSystemWatchlist({
+  active,
+  tenantFactionName,
+  canManageTenantRules,
+  canRunBgsAi,
+}: {
+  active: boolean;
+  tenantFactionName: string;
+  canManageTenantRules: boolean;
+  canRunBgsAi: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState<WatchlistFilters>({
+    ...emptyWatchlistFilters,
+  });
+  const [sortField, setSortField] =
+    useState<GlobalWatchlistSortField>("system");
+  const [sortDescending, setSortDescending] = useState(false);
+  const [page, setPage] = useState(1);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [ruleSystem, setRuleSystem] = useState<string>();
+  const personalQuery = useQuery({
+    queryKey: ["system-watchlist-data"],
+    queryFn: loadWatchlist,
+    refetchInterval: false,
+  });
+  const query = useQuery({
+    queryKey: [
+      "system-watchlist-global",
+      page,
+      sortField,
+      sortDescending,
+      filters,
+    ],
+    queryFn: () =>
+      loadGlobalWatchlist(page, sortField, sortDescending, filters),
+    enabled: active,
+    refetchInterval: active ? 60_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const mutation = useMutation({
+    mutationFn: saveWatchlist,
+    onMutate: async (systems) => {
+      await queryClient.cancelQueries({ queryKey: ["system-watchlist-data"] });
+      const previous = queryClient.getQueryData<WatchlistPayload>([
+        "system-watchlist-data",
+      ]);
+      queryClient.setQueryData<WatchlistPayload>(
+        ["system-watchlist-data"],
+        (current) => (current ? { ...current, watchlist: systems } : current),
+      );
+      return { previous };
+    },
+    onError: (_error, _systems, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(["system-watchlist-data"], context.previous);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["system-watchlist-data"],
+      });
+    },
+  });
+  const personalWatchlist = useMemo(
+    () => personalQuery.data?.watchlist ?? [],
+    [personalQuery.data?.watchlist],
+  );
+  const personalSystems = useMemo(
+    () =>
+      new Set(
+        personalWatchlist.map((entry) => entry.system.toLocaleLowerCase("en")),
+      ),
+    [personalWatchlist],
+  );
+  const total = query.data?.pagination.total ?? 0;
+  const pageSize = query.data?.pagination.pageSize ?? globalWatchlistPageSize;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total ? (page - 1) * pageSize + 1 : 0;
+  const rangeEnd = Math.min(page * pageSize, total);
+  const ruleSystems = [
+    ...new Set([
+      ...personalWatchlist.map((entry) => entry.system),
+      ...(ruleSystem ? [ruleSystem] : []),
+    ]),
+  ].sort((left, right) => left.localeCompare(right, "en"));
+
+  return (
+    <>
+      <header className="page-header watchlist-page-header">
+        <div>
+          <p className="eyebrow">INTELLIGENCE / GLOBAL BGS WATCHLIST</p>
+          <h1>Global system watchlist</h1>
+          <p>
+            Every system containing {tenantFactionName}, with current EDDN
+            faction data and seven-day influence history.
+          </p>
+        </div>
+        <div>
+          <span className="live-status">
+            <i /> 60s refresh
+          </span>
+          <button
+            className="secondary-button"
+            onClick={() => query.refetch()}
+            disabled={query.isFetching}
+          >
+            <RefreshCw className={query.isFetching ? "spin" : ""} size={15} />
+            Refresh
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setRuleSystem(undefined);
+              setRulesOpen(true);
+            }}
+          >
+            <BellRing size={15} /> Rules
+          </button>
+          <small>
+            {query.data?.generatedAt
+              ? `Updated ${formatUpdated(query.data.generatedAt)}`
+              : "Loading the global watchlist…"}
+          </small>
+        </div>
+      </header>
+
+      <section className="surface watchlist-toolbar watchlist-toolbar-global">
+        <div className="watchlist-summary">
+          <strong>{total}</strong>
+          <span>tenant-faction systems</span>
+          <span
+            className="watchlist-presence-key"
+            title={`Systems containing ${tenantFactionName}`}
+          >
+            <ShieldCheck size={13} aria-hidden="true" />
+            <span>{tenantFactionName}</span>
+          </span>
+        </div>
+        <button
+          type="button"
+          className="watchlist-filter-button"
+          onClick={() => setFilterOpen(true)}
+        >
+          <ListFilter size={14} aria-hidden="true" />
+          Filters
+          {activeFilterCount(filters, "global") > 0 && (
+            <span>{activeFilterCount(filters, "global")}</span>
+          )}
+        </button>
+        <div className="watchlist-sort-controls">
+          <label>
+            <span className="sr-only">Sort global systems by</span>
+            <select
+              value={sortField}
+              onChange={(event) => {
+                setSortField(event.target.value as GlobalWatchlistSortField);
+                setPage(1);
+              }}
+              aria-label="Sort global systems by"
+            >
+              {globalWatchlistSortOptions.map((option) => (
+                <option value={option.value} key={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setSortDescending((current) => !current);
+              setPage(1);
+            }}
+            aria-label={`Sort ${sortDescending ? "ascending" : "descending"}`}
+            title={`Currently ${sortDescending ? "descending" : "ascending"}; click to reverse`}
+          >
+            <ArrowDownUp size={14} aria-hidden="true" />
+            <span>{sortDescending ? "Descending" : "Ascending"}</span>
+          </button>
+        </div>
+      </section>
+
+      {(query.isError || mutation.isError || personalQuery.isError) && (
+        <div className="error-banner" role="alert">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Could not load the global system watchlist</strong>
+            <span>
+              {query.error?.message ??
+                mutation.error?.message ??
+                personalQuery.error?.message}
+            </span>
+          </div>
+          <button onClick={() => query.refetch()}>Retry</button>
+        </div>
+      )}
+
+      {!query.isLoading && !query.isError && total === 0 && (
+        <section className="surface watchlist-empty">
+          <Activity size={24} />
+          <div>
+            <strong>No matching tenant-faction systems</strong>
+            <span>
+              Clear filters or wait for the next EDDN update for{" "}
+              {tenantFactionName}.
+            </span>
+          </div>
+        </section>
+      )}
+
+      <section className="system-watch-list" aria-busy={query.isLoading}>
+        {query.isLoading && (
+          <p className="inline-empty">Loading tenant-faction systems…</p>
+        )}
+        {(query.data?.systems ?? []).map((system) => {
+          const entry: SystemWatchlistEntry = {
+            system: system.requestedSystem || system.name,
+            sector: "",
+            projectName: "",
+            favorite: false,
+          };
+          const alreadyPersonal = personalSystems.has(
+            entry.system.toLocaleLowerCase("en"),
+          );
+          return (
+            <SystemStrip
+              scope="global"
+              key={entry.system.toLocaleLowerCase("en")}
+              entry={entry}
+              system={system}
+              tenantFactionName={tenantFactionName}
+              saving={mutation.isPending}
+              canRunBgsAi={canRunBgsAi}
+              alreadyPersonal={alreadyPersonal}
+              personalWatchlistFull={personalWatchlist.length >= 100}
+              onAddToPersonal={() => {
+                if (alreadyPersonal || personalWatchlist.length >= 100) return;
+                mutation.mutate([...personalWatchlist, entry]);
+              }}
+              onCreateRule={() => {
+                setRuleSystem(entry.system);
+                setRulesOpen(true);
+              }}
+            />
+          );
+        })}
+      </section>
+
+      {total > 0 && (
+        <nav
+          className="surface watchlist-pagination"
+          aria-label="Global watchlist pages"
+        >
+          <span>
+            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of{" "}
+            {total.toLocaleString()}
+          </span>
+          <div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page <= 1 || query.isFetching}
+            >
+              <ChevronLeft size={14} aria-hidden="true" /> Previous
+            </button>
+            <strong>
+              Page {page.toLocaleString()} of {totalPages.toLocaleString()}
+            </strong>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+              disabled={page >= totalPages || query.isFetching}
+            >
+              Next <ChevronRight size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </nav>
+      )}
+
+      <WatchlistFilterSheet
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+        scope="global"
+        filters={filters}
+        sectors={[]}
+        allegianceOptions={query.data?.filterOptions.allegiances ?? []}
+        governmentOptions={query.data?.filterOptions.governments ?? []}
+        onApply={(nextFilters) => {
+          setFilters({ ...nextFilters, sector: "" });
+          setPage(1);
+        }}
+      />
+      <BgsRuleManager
+        key={`${ruleSystem ?? "global"}-${rulesOpen ? "open" : "closed"}`}
+        open={rulesOpen}
+        onOpenChange={setRulesOpen}
+        initialSystem={ruleSystem}
+        systems={ruleSystems}
+        canManageTenant={canManageTenantRules}
+      />
+    </>
+  );
+}
+
+export function SystemWatchlist({
+  tenantFactionName,
+  canManageTenantRules,
+  canRunBgsAi,
+}: {
+  tenantFactionName: string;
+  canManageTenantRules: boolean;
+  canRunBgsAi: boolean;
+}) {
+  const [scope, setScope] = useState<WatchlistScope>("personal");
+  return (
+    <>
+      <nav
+        className="surface watchlist-scope-tabs"
+        role="tablist"
+        aria-label="BGS watchlist scope"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={scope === "personal"}
+          onClick={() => setScope("personal")}
+        >
+          Personal watchlist
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={scope === "global"}
+          onClick={() => setScope("global")}
+        >
+          Global watchlist
+        </button>
+      </nav>
+      <div hidden={scope !== "personal"} role="tabpanel">
+        <PersonalSystemWatchlist
+          active={scope === "personal"}
+          tenantFactionName={tenantFactionName}
+          canManageTenantRules={canManageTenantRules}
+          canRunBgsAi={canRunBgsAi}
+        />
+      </div>
+      <div hidden={scope !== "global"} role="tabpanel">
+        <GlobalSystemWatchlist
+          active={scope === "global"}
+          tenantFactionName={tenantFactionName}
+          canManageTenantRules={canManageTenantRules}
+          canRunBgsAi={canRunBgsAi}
+        />
+      </div>
     </>
   );
 }
