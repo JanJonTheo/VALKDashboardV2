@@ -13,7 +13,13 @@ import {
   Webhook,
   X,
 } from "lucide-react";
-import { useDeferredValue, useState, type FormEvent } from "react";
+import {
+  useDeferredValue,
+  useId,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 
 export interface ManagedProtectedFaction {
   id: number;
@@ -413,6 +419,10 @@ function ProtectedFactionForm({
   const [description, setDescription] = useState(faction?.description ?? "");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [protectedState, setProtectedState] = useState(true);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [activeCandidateIndex, setActiveCandidateIndex] = useState(-1);
+  const nameInputId = useId();
+  const suggestionListId = useId();
   const deferredName = useDeferredValue(name.trim());
   const candidates = useQuery<CandidateEnvelope>({
     queryKey: ["protected-faction-candidates", deferredName],
@@ -422,6 +432,50 @@ function ProtectedFactionForm({
       ),
     enabled: deferredName.length >= 2,
   });
+  const candidateItems = candidates.data?.data ?? [];
+  const currentSearch = name.trim();
+  const showSuggestionPanel =
+    suggestionsOpen &&
+    currentSearch.length >= 2 &&
+    deferredName === currentSearch &&
+    !candidates.isError;
+  const activeCandidate = candidateItems[activeCandidateIndex];
+
+  function selectCandidate(candidateName: string) {
+    setName(candidateName);
+    setSuggestionsOpen(false);
+    setActiveCandidateIndex(-1);
+  }
+
+  function handleCandidateKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSuggestionsOpen(true);
+      if (candidateItems.length)
+        setActiveCandidateIndex((current) =>
+          current >= candidateItems.length - 1 ? 0 : current + 1,
+        );
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSuggestionsOpen(true);
+      if (candidateItems.length)
+        setActiveCandidateIndex((current) =>
+          current <= 0 ? candidateItems.length - 1 : current - 1,
+        );
+      return;
+    }
+    if (event.key === "Enter" && showSuggestionPanel && activeCandidate) {
+      event.preventDefault();
+      selectCandidate(activeCandidate.name);
+      return;
+    }
+    if (event.key === "Escape") {
+      setSuggestionsOpen(false);
+      setActiveCandidateIndex(-1);
+    }
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -438,29 +492,88 @@ function ProtectedFactionForm({
 
   return (
     <form className="account-form" onSubmit={submit}>
-      <label>
-        <span>Faction name</span>
-        <input
-          name="name"
-          aria-label="Faction name"
-          list="protected-faction-candidates"
-          value={name}
-          maxLength={128}
-          autoComplete="off"
-          required
-          onChange={(event) => setName(event.target.value)}
-        />
-        <datalist id="protected-faction-candidates">
-          {candidates.data?.data.map((candidate) => (
-            <option key={candidate.name} value={candidate.name} />
-          ))}
-        </datalist>
+      <div className="protected-faction-field">
+        <label htmlFor={nameInputId}>
+          <span>Faction name</span>
+        </label>
+        <div
+          className="protected-faction-combobox"
+          onBlur={(event) => {
+            const nextTarget = event.relatedTarget;
+            if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+              setSuggestionsOpen(false);
+              setActiveCandidateIndex(-1);
+            }
+          }}
+        >
+          <input
+            id={nameInputId}
+            name="name"
+            aria-label="Faction name"
+            aria-autocomplete="list"
+            aria-controls={suggestionListId}
+            aria-expanded={showSuggestionPanel}
+            aria-activedescendant={
+              showSuggestionPanel && activeCandidate
+                ? `${suggestionListId}-option-${activeCandidateIndex}`
+                : undefined
+            }
+            role="combobox"
+            value={name}
+            maxLength={128}
+            autoComplete="off"
+            required
+            onFocus={() => setSuggestionsOpen(name.trim().length >= 2)}
+            onKeyDown={handleCandidateKeyDown}
+            onChange={(event) => {
+              const nextName = event.target.value;
+              setName(nextName);
+              setSuggestionsOpen(nextName.trim().length >= 2);
+              setActiveCandidateIndex(-1);
+            }}
+          />
+          {showSuggestionPanel && (
+            <div
+              id={suggestionListId}
+              className="protected-faction-suggestions"
+              role="listbox"
+              aria-label="EDDN faction suggestions"
+            >
+              {candidateItems.map((candidate, index) => (
+                <div
+                  id={`${suggestionListId}-option-${index}`}
+                  className="protected-faction-suggestion"
+                  key={candidate.name}
+                  role="option"
+                  aria-selected={index === activeCandidateIndex}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveCandidateIndex(index)}
+                  onClick={() => selectCandidate(candidate.name)}
+                >
+                  {candidate.name}
+                </div>
+              ))}
+              {!candidateItems.length && (
+                <div
+                  className="protected-faction-suggestion-empty"
+                  role="option"
+                  aria-disabled="true"
+                  aria-selected="false"
+                >
+                  {candidates.isFetching
+                    ? "Searching EDDN…"
+                    : "No EDDN matches. Free-text entry remains available."}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <small>
           {candidates.isFetching
             ? "Searching EDDN…"
             : "Select an EDDN suggestion or keep the exact free-text name."}
         </small>
-      </label>
+      </div>
       <label>
         <span>Description</span>
         <input

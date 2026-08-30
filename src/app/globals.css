@@ -3776,6 +3776,53 @@ textarea:focus-visible {
   font-size: 10px;
   line-height: 1.45;
 }
+.protected-faction-field {
+  display: grid;
+  gap: 7px;
+}
+.protected-faction-combobox {
+  position: relative;
+}
+.protected-faction-combobox > input {
+  width: 100%;
+}
+.protected-faction-suggestions {
+  position: absolute;
+  z-index: 95;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #46515f;
+  border-radius: 6px;
+  padding: 4px;
+  background: #0b1118;
+  box-shadow: 0 14px 32px #000a;
+}
+.protected-faction-suggestion {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.protected-faction-suggestion:hover,
+.protected-faction-suggestion[aria-selected="true"] {
+  background: #202a35;
+  color: var(--gold);
+}
+.protected-faction-suggestion-empty {
+  display: block;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .protected-faction-form-footer {
   display: grid !important;
   grid-template-columns: auto 1fr auto auto;

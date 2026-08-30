@@ -815,7 +815,7 @@ test("admins can manage protected factions without exposing webhook secrets", as
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ data: [{ name: "Aegis Vanguard" }] }),
+        body: JSON.stringify({ data: [{ name: "East India Company" }] }),
       });
       return;
     }
@@ -874,7 +874,15 @@ test("admins can manage protected factions without exposing webhook secrets", as
   const createDialog = page.getByRole("dialog", {
     name: "Create protected faction",
   });
-  await createDialog.getByLabel("Faction name").fill("Aegis Vanguard");
+  const factionName = createDialog.getByLabel("Faction name");
+  await factionName.fill("Eas");
+  await expect(
+    createDialog.getByRole("option", { name: "East India Company" }),
+  ).toBeVisible();
+  await createDialog
+    .getByRole("option", { name: "East India Company" })
+    .click();
+  await expect(factionName).toHaveValue("East India Company");
   await createDialog.getByLabel("Description").fill("New ally");
   await createDialog
     .getByLabel("Discord webhook URL (optional)")
@@ -886,7 +894,7 @@ test("admins can manage protected factions without exposing webhook secrets", as
       path: "/api/admin/protected-factions",
       method: "POST",
       body: {
-        name: "Aegis Vanguard",
+        name: "East India Company",
         description: "New ally",
         protected: true,
         webhook_url: "https://discord.com/api/webhooks/123/private_token",

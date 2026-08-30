@@ -48,7 +48,7 @@ describe("protected faction administration", () => {
         async (input: RequestInfo | URL, init?: RequestInit) => {
           const url = String(input);
           if (url.includes("/candidates?"))
-            return Response.json({ data: [{ name: "Aegis Vanguard" }] });
+            return Response.json({ data: [{ name: "East India Company" }] });
           if (url === "/api/admin/protected-factions" && !init?.method)
             return Response.json({ data: initialFactions });
           if (
@@ -59,7 +59,7 @@ describe("protected faction administration", () => {
               {
                 data: {
                   id: 9,
-                  name: "Aegis Vanguard",
+                  name: "East India Company",
                   description: "New ally",
                   protected: true,
                   webhook_configured: true,
@@ -112,8 +112,9 @@ describe("protected faction administration", () => {
       screen.getByRole("button", { name: "New protected faction" }),
     );
 
-    fireEvent.change(screen.getByLabelText("Faction name"), {
-      target: { value: "Aegis Vanguard" },
+    const nameInput = screen.getByLabelText("Faction name");
+    fireEvent.change(nameInput, {
+      target: { value: "Eas" },
     });
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "New ally" },
@@ -125,10 +126,17 @@ describe("protected faction administration", () => {
     });
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/candidates?q=Aegis%20Vanguard"),
+        expect.stringContaining("/candidates?q=Eas"),
         expect.anything(),
       ),
     );
+    const candidate = await screen.findByRole("option", {
+      name: "East India Company",
+    });
+    expect(nameInput).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(candidate);
+    expect(nameInput).toHaveValue("East India Company");
+    expect(nameInput).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(screen.getByRole("button", { name: "Create faction" }));
 
     await waitFor(() =>
@@ -142,7 +150,7 @@ describe("protected faction administration", () => {
         url === "/api/admin/protected-factions" && init?.method === "POST",
     );
     expect(JSON.parse(String(request?.[1]?.body))).toEqual({
-      name: "Aegis Vanguard",
+      name: "East India Company",
       description: "New ally",
       protected: true,
       webhook_url: "https://discord.com/api/webhooks/123/private_token",
