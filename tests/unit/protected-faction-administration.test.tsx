@@ -119,7 +119,11 @@ describe("protected faction administration", () => {
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "New ally" },
     });
-    fireEvent.change(screen.getByLabelText("Discord webhook URL (optional)"), {
+    const webhookInput = screen.getByLabelText(
+      "Discord webhook URL (optional)",
+    );
+    expect(webhookInput).toHaveAttribute("type", "url");
+    fireEvent.change(webhookInput, {
       target: {
         value: "https://discord.com/api/webhooks/123/private_token",
       },

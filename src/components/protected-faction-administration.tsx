@@ -597,8 +597,9 @@ function ProtectedFactionForm({
               ? "Replace Discord webhook URL"
               : "Discord webhook URL (optional)"
           }
-          type="password"
+          type="url"
           autoComplete="off"
+          spellCheck={false}
           value={webhookUrl}
           placeholder="https://discord.com/api/webhooks/…"
           onChange={(event) => setWebhookUrl(event.target.value)}

@@ -884,9 +884,11 @@ test("admins can manage protected factions without exposing webhook secrets", as
     .click();
   await expect(factionName).toHaveValue("East India Company");
   await createDialog.getByLabel("Description").fill("New ally");
-  await createDialog
-    .getByLabel("Discord webhook URL (optional)")
-    .fill("https://discord.com/api/webhooks/123/private_token");
+  const webhookInput = createDialog.getByLabel(
+    "Discord webhook URL (optional)",
+  );
+  await expect(webhookInput).toHaveAttribute("type", "url");
+  await webhookInput.fill("https://discord.com/api/webhooks/123/private_token");
   await createDialog.getByRole("button", { name: "Create faction" }).click();
   await expect
     .poll(() => mutations[0])
