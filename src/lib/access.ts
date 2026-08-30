@@ -12,6 +12,7 @@ export const capabilities = [
   "admin:read",
   "users:read",
   "users:manage",
+  "protected-factions:manage",
 ] as const;
 export type Capability = (typeof capabilities)[number];
 

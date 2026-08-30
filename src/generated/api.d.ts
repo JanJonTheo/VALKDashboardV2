@@ -504,6 +504,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/protected-factions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listAdminProtectedFactions"];
+    put?: never;
+    post: operations["createAdminProtectedFaction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/protected-factions/candidates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["searchAdminProtectedFactionCandidates"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/protected-factions/{faction_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        faction_id: number;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["deleteAdminProtectedFaction"];
+    options?: never;
+    head?: never;
+    patch: operations["updateAdminProtectedFaction"];
+    trace?: never;
+  };
+  "/admin/protected-factions/{faction_id}/webhook-test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        faction_id: number;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["testAdminProtectedFactionWebhook"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/account/access": {
     parameters: {
       query?: never;
@@ -558,6 +626,25 @@ export interface components {
       updated_at?: string | null;
       /** Format: date-time */
       last_login_at?: string | null;
+    };
+    ManagedProtectedFaction: {
+      id: number;
+      name: string;
+      description: string;
+      protected: boolean;
+      webhook_configured: boolean;
+    };
+    ProtectedFactionMutationInput: {
+      name?: string;
+      description?: string;
+      protected?: boolean;
+      /** Format: uri */
+      webhook_url?: string | null;
+    };
+    ProtectedFactionCreateInput: components["schemas"]["ProtectedFactionMutationInput"] &
+      Record<string, never>;
+    ProtectedFactionCandidate: {
+      name: string;
     };
     ObjectiveInput: {
       title: string;
@@ -1698,6 +1785,159 @@ export interface operations {
             one_time_password: string;
           };
         };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  listAdminProtectedFactions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description All protected factions for the selected tenant */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["ManagedProtectedFaction"][];
+            /** Format: date-time */
+            generated_at: string;
+            pagination: components["schemas"]["Pagination"];
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  createAdminProtectedFaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProtectedFactionCreateInput"];
+      };
+    };
+    responses: {
+      /** @description Protected faction created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["ManagedProtectedFaction"];
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  searchAdminProtectedFactionCandidates: {
+    parameters: {
+      query: {
+        q: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description EDDN faction-name suggestions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["ProtectedFactionCandidate"][];
+            /** Format: date-time */
+            generated_at: string;
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  deleteAdminProtectedFaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        faction_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Protected faction deleted and monitoring state paused */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  updateAdminProtectedFaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        faction_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProtectedFactionMutationInput"];
+      };
+    };
+    responses: {
+      /** @description Protected faction updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            data: components["schemas"]["ManagedProtectedFaction"];
+            alerts_resolved?: number;
+            states_paused?: number;
+          };
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  testAdminProtectedFactionWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        faction_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Test message delivered */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       default: components["responses"]["ErrorResponse"];
     };

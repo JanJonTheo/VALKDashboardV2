@@ -16,6 +16,7 @@ import {
   Orbit,
   RefreshCw,
   Shield,
+  ShieldCheck,
   Swords,
   Target,
   Users,
@@ -92,6 +93,11 @@ const groups = [
     admin: true,
     links: [
       { href: "/admin/users", label: "User administration", icon: Users },
+      {
+        href: "/admin/protected-factions",
+        label: "Protected factions",
+        icon: ShieldCheck,
+      },
       { href: "/admin/data-explorer", label: "Data explorer", icon: Database },
       { href: "/admin/health", label: "Service & audit", icon: Bot },
     ],

@@ -3662,6 +3662,137 @@ textarea:focus-visible {
   gap: 7px;
   font-size: 11px;
 }
+.protected-faction-admin-surface {
+  padding: 0;
+  overflow: visible;
+}
+.protected-faction-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.35fr);
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.protected-faction-toolbar label,
+.protected-faction-delete-confirmation {
+  display: grid;
+  gap: 6px;
+}
+.protected-faction-toolbar label > span,
+.protected-faction-delete-confirmation > span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.protected-faction-toolbar input,
+.protected-faction-toolbar select,
+.protected-faction-delete-confirmation input {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  background: #090d12;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+.protected-faction-list {
+  display: grid;
+}
+.protected-faction-admin-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 12px 18px;
+  align-items: center;
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.protected-faction-admin-row:last-child {
+  border-bottom: 0;
+}
+.protected-faction-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.protected-faction-identity > svg {
+  color: var(--gold);
+  flex: none;
+  margin-top: 1px;
+}
+.protected-faction-identity > div,
+.protected-faction-state {
+  display: grid;
+  gap: 5px;
+}
+.protected-faction-identity strong {
+  font-size: 13px;
+}
+.protected-faction-identity span,
+.protected-webhook-state {
+  color: var(--muted);
+  font-size: 10px;
+}
+.protected-faction-state {
+  justify-items: end;
+}
+.protected-status {
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.protected-status.active {
+  border-color: #456a54;
+  color: #8fcca4;
+  background: #112019;
+}
+.protected-status.inactive {
+  border-color: #66544b;
+  color: #b8a39a;
+  background: #1d1816;
+}
+.protected-webhook-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.protected-faction-actions {
+  grid-column: 1/-1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.protected-faction-notice {
+  margin: 0 0 14px;
+}
+.protected-faction-editor small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.protected-faction-form-footer {
+  display: grid !important;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+}
+.protected-faction-remove-webhook {
+  justify-self: start;
+}
+.protected-faction-delete-confirmation {
+  margin-top: 20px;
+}
+.protected-faction-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
 .one-time-password {
   display: flex;
   align-items: center;
@@ -3785,6 +3916,31 @@ textarea:focus-visible {
   }
   .social-links article button {
     width: 100%;
+  }
+  .protected-faction-toolbar,
+  .protected-faction-admin-row {
+    grid-template-columns: 1fr;
+  }
+  .protected-faction-state {
+    justify-items: start;
+  }
+  .protected-faction-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .protected-faction-actions button {
+    justify-content: center;
+  }
+  .protected-faction-form-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+  .protected-faction-form-footer > span {
+    display: none;
+  }
+  .protected-faction-remove-webhook {
+    grid-column: 1/-1;
+    justify-self: stretch;
+    justify-content: center;
   }
 }
 

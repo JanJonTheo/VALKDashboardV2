@@ -838,6 +838,123 @@ paths:
             },
           default: { $ref: "#/components/responses/ErrorResponse" },
         }
+  /admin/protected-factions:
+    get:
+      operationId: listAdminProtectedFactions
+      security: [{ dashboardBearer: [] }]
+      x-capability: protected-factions:manage
+      responses:
+        "200":
+          description: All protected factions for the selected tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, generated_at, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      { $ref: "#/components/schemas/ManagedProtectedFaction" }
+                  generated_at: { type: string, format: date-time }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    post:
+      operationId: createAdminProtectedFaction
+      security: [{ dashboardBearer: [] }]
+      x-capability: protected-factions:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProtectedFactionCreateInput" }
+      responses:
+        "201":
+          description: Protected faction created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ManagedProtectedFaction" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /admin/protected-factions/candidates:
+    get:
+      operationId: searchAdminProtectedFactionCandidates
+      security: [{ dashboardBearer: [] }]
+      x-capability: protected-factions:manage
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 128 }
+      responses:
+        "200":
+          description: EDDN faction-name suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, generated_at]
+                properties:
+                  data:
+                    type: array
+                    maxItems: 20
+                    items:
+                      { $ref: "#/components/schemas/ProtectedFactionCandidate" }
+                  generated_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /admin/protected-factions/{faction_id}:
+    parameters:
+      - name: faction_id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    patch:
+      operationId: updateAdminProtectedFaction
+      security: [{ dashboardBearer: [] }]
+      x-capability: protected-factions:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: "#/components/schemas/ProtectedFactionMutationInput" }
+      responses:
+        "200":
+          description: Protected faction updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ManagedProtectedFaction" }
+                  alerts_resolved: { type: integer, minimum: 0 }
+                  states_paused: { type: integer, minimum: 0 }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+    delete:
+      operationId: deleteAdminProtectedFaction
+      security: [{ dashboardBearer: [] }]
+      x-capability: protected-factions:manage
+      responses:
+        "200":
+          description: Protected faction deleted and monitoring state paused
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /admin/protected-factions/{faction_id}/webhook-test:
+    parameters:
+      - name: faction_id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    post:
+      operationId: testAdminProtectedFactionWebhook
+      security: [{ dashboardBearer: [] }]
+      x-capability: protected-factions:manage
+      responses:
+        "200": { description: Test message delivered }
+        default: { $ref: "#/components/responses/ErrorResponse" }
   /account/access:
     get:
       operationId: getDashboardAccess
@@ -919,6 +1036,35 @@ components:
         created_at: { type: [string, "null"], format: date-time }
         updated_at: { type: [string, "null"], format: date-time }
         last_login_at: { type: [string, "null"], format: date-time }
+    ManagedProtectedFaction:
+      type: object
+      required: [id, name, description, protected, webhook_configured]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        description: { type: string, maxLength: 128 }
+        protected: { type: boolean }
+        webhook_configured: { type: boolean }
+    ProtectedFactionMutationInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        description: { type: string, maxLength: 128 }
+        protected: { type: boolean }
+        webhook_url:
+          type: [string, "null"]
+          format: uri
+          writeOnly: true
+    ProtectedFactionCreateInput:
+      allOf:
+        - { $ref: "#/components/schemas/ProtectedFactionMutationInput" }
+        - type: object
+          required: [name]
+    ProtectedFactionCandidate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
     ObjectiveInput:
       type: object
       required: [title]

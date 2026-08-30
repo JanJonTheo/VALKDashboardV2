@@ -796,3 +796,113 @@ test("protected watchlist applies early warning to one faction", async ({
       discord: true,
     });
 });
+
+test("admins can manage protected factions without exposing webhook secrets", async ({
+  page,
+}) => {
+  const mutations: { path: string; method: string; body: unknown }[] = [];
+  await page.route("**/api/bgs-alerts**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], unread_count: 0 }),
+    }),
+  );
+  await page.route("**/api/admin/protected-factions**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/candidates")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [{ name: "Aegis Vanguard" }] }),
+      });
+      return;
+    }
+    if (request.method() !== "GET") {
+      mutations.push({
+        path: url.pathname,
+        method: request.method(),
+        body: request.postDataJSON?.() ?? null,
+      });
+      await route.fulfill({
+        status:
+          request.method() === "POST" && !url.pathname.endsWith("webhook-test")
+            ? 201
+            : 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [
+          {
+            id: 7,
+            name: "Aegis Shield",
+            description: "Primary ally",
+            protected: true,
+            webhook_configured: true,
+          },
+          {
+            id: 8,
+            name: "Beacon Guard",
+            description: "Reserve ally",
+            protected: false,
+            webhook_configured: false,
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/admin/protected-factions");
+  await expect(
+    page.getByRole("heading", { name: "Protected factions" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Protected factions" }),
+  ).toBeVisible();
+  await expect(page.getByText("Aegis Shield", { exact: true })).toBeVisible();
+  await expect(page.getByText("Discord configured")).toBeVisible();
+  await expect(page.getByText(/private_token/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "New protected faction" }).click();
+  const createDialog = page.getByRole("dialog", {
+    name: "Create protected faction",
+  });
+  await createDialog.getByLabel("Faction name").fill("Aegis Vanguard");
+  await createDialog.getByLabel("Description").fill("New ally");
+  await createDialog
+    .getByLabel("Discord webhook URL (optional)")
+    .fill("https://discord.com/api/webhooks/123/private_token");
+  await createDialog.getByRole("button", { name: "Create faction" }).click();
+  await expect
+    .poll(() => mutations[0])
+    .toEqual({
+      path: "/api/admin/protected-factions",
+      method: "POST",
+      body: {
+        name: "Aegis Vanguard",
+        description: "New ally",
+        protected: true,
+        webhook_url: "https://discord.com/api/webhooks/123/private_token",
+      },
+    });
+
+  const aegisRow = page
+    .getByText("Aegis Shield", { exact: true })
+    .locator("xpath=ancestor::article");
+  await aegisRow.getByRole("button", { name: "Test webhook" }).click();
+  await expect
+    .poll(() => mutations.at(-1)?.path)
+    .toBe("/api/admin/protected-factions/7/webhook-test");
+
+  const accessibility = await new AxeBuilder({ page })
+    .disableRules(["color-contrast"])
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+});

@@ -14,6 +14,8 @@ describe("role capabilities", () => {
   it("keeps raw data admin-only", () => {
     expect(can("leadership", "admin:read")).toBe(false);
     expect(can("admin", "admin:read")).toBe(true);
+    expect(can("leadership", "protected-factions:manage")).toBe(false);
+    expect(can("admin", "protected-factions:manage")).toBe(true);
   });
   it("allows members to read dashboards and manage personal rules", () => {
     expect(capabilitiesFor("member")).toContain("dashboard:read");
