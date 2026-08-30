@@ -179,17 +179,39 @@ function packageFor(
   );
 }
 
-function conditionSummary(condition: BgsCondition) {
+const protectedFactionConditionLabels: Partial<
+  Record<BgsRuleConditionType, string>
+> = {
+  tenant_faction_loss: "Protected faction loses influence",
+  tenant_faction_new_conflict: "Protected faction enters a conflict",
+  tenant_faction_below: "Protected faction below threshold",
+  tenant_faction_gap: "Another faction closes the gap to the protected faction",
+};
+
+function conditionLabel(
+  type: BgsRuleConditionType,
+  targetKind: BgsRuleTemplate["target_kind"],
+) {
   const option = bgsRuleConditionOptions.find(
-    (candidate) => candidate.value === condition.type,
+    (candidate) => candidate.value === type,
   );
+  return targetKind === "protected_faction"
+    ? (protectedFactionConditionLabels[type] ?? option?.label ?? type)
+    : (option?.label ?? type);
+}
+
+function conditionSummary(
+  condition: BgsCondition,
+  targetKind: BgsRuleTemplate["target_kind"],
+) {
+  const label = conditionLabel(condition.type, targetKind);
   if (condition.type === "tenant_faction_new_conflict")
-    return `${option?.label}: Election, War`;
+    return `${label}: Election, War`;
   const suffix =
     condition.threshold_pp === undefined
       ? ""
       : ` · ${condition.threshold_pp} pp`;
-  return `${option?.label ?? condition.type}${suffix}`;
+  return `${label}${suffix}`;
 }
 
 export function BgsRuleCatalog({
@@ -265,6 +287,9 @@ export function BgsRuleCatalog({
     () => catalogQuery.data?.data ?? [],
     [catalogQuery.data?.data],
   );
+  const editingTargetKind =
+    templates.find((template) => template.id === editingId)?.target_kind ??
+    "watchlist";
 
   function beginCreate() {
     setEditingId(undefined);
@@ -393,7 +418,10 @@ export function BgsRuleCatalog({
                     <span className={`severity-pill ${item.severity}`}>
                       {item.severity}
                     </span>
-                    {conditionSummary(item.condition)}
+                    {conditionSummary(
+                      item.condition,
+                      template.target_kind ?? "watchlist",
+                    )}
                   </li>
                 ))}
               </ul>
@@ -727,7 +755,7 @@ export function BgsRuleCatalog({
                       >
                         {bgsRuleConditionOptions.map((option) => (
                           <option value={option.value} key={option.value}>
-                            {option.label}
+                            {conditionLabel(option.value, editingTargetKind)}
                           </option>
                         ))}
                       </select>

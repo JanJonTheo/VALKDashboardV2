@@ -773,7 +773,20 @@ test("protected watchlist applies early warning to one faction", async ({
 
   await page.getByRole("button", { name: "Rules" }).click();
   await page.getByRole("button", { name: "Catalog" }).click();
-  await expect(page.getByText("Protected Faction Early Warning")).toBeVisible();
+  const protectedCatalogCard = page
+    .getByText("Protected Faction Early Warning")
+    .locator("xpath=ancestor::article");
+  await expect(protectedCatalogCard).toBeVisible();
+  await expect(protectedCatalogCard).not.toContainText("Tenant faction");
+  await expect(protectedCatalogCard).toContainText(
+    "Protected faction loses influence · 3 pp",
+  );
+  await expect(protectedCatalogCard).toContainText(
+    "Protected faction enters a conflict: Election, War",
+  );
+  await expect(protectedCatalogCard).toContainText(
+    "Protected faction below threshold · 5 pp",
+  );
   await page.getByRole("button", { name: "Apply template" }).click();
   const applyDialog = page.getByRole("dialog", {
     name: "Protected Faction Early Warning",

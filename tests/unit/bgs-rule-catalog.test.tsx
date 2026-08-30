@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BgsRuleCatalog } from "@/components/bgs-rule-catalog";
@@ -234,7 +235,30 @@ describe("BGS rule catalog", () => {
       </QueryClientProvider>,
     );
 
-    await screen.findByText("Protected Faction Early Warning");
+    const protectedCard = (
+      await screen.findByText("Protected Faction Early Warning")
+    ).closest("article")!;
+    expect(protectedCard).not.toHaveTextContent("Tenant faction");
+    expect(
+      within(protectedCard).getByText(
+        "Protected faction loses influence · 3 pp",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(protectedCard).getByText(
+        "Protected faction enters a conflict: Election, War",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(protectedCard).getByText(
+        "Protected faction below threshold · 5 pp",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(protectedCard).getByText(
+        "Another faction closes the gap to the protected faction · 2 pp",
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(
       screen.getAllByRole("button", { name: "Apply template" })[1],
     );
