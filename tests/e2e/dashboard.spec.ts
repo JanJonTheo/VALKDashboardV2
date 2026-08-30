@@ -2,6 +2,59 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 test("home and analytics are usable", async ({ page }, testInfo) => {
+  await page.route("**/api/bgs-alerts**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        unread_count: 2,
+        data: [
+          {
+            id: "home-alert-1",
+            rule_id: "rule-1",
+            rule_name: "Controller guard",
+            owner_scope: "tenant",
+            system_name: "HIP 91987",
+            severity: "critical",
+            title: "Controller influence critical",
+            message:
+              "The controlling faction is below the configured threshold.",
+            facts: {},
+            event_key: "controller-guard",
+            fired_ticktime: "2026-08-29T12:00:00Z",
+            fired_at: "2026-08-29T12:05:00Z",
+            resolved_at: null,
+            read_at: null,
+            acknowledged_at: null,
+          },
+          {
+            id: "home-alert-2",
+            rule_id: "rule-2",
+            rule_name: "Competitor movement",
+            owner_scope: "personal",
+            system_name: "Pollux",
+            severity: "warning",
+            title: "Competitor gained influence",
+            message: "A monitored competitor gained influence after the tick.",
+            facts: {},
+            event_key: "competitor-movement",
+            fired_ticktime: "2026-08-29T12:00:00Z",
+            fired_at: "2026-08-29T12:06:00Z",
+            resolved_at: null,
+            read_at: null,
+            acknowledged_at: null,
+          },
+        ],
+      }),
+    }),
+  );
+  const homeAlertsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/bgs-alerts" &&
+      url.searchParams.get("status") === "active"
+    );
+  });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Welcome/ })).toBeVisible({
     timeout: 15_000,
@@ -39,6 +92,20 @@ test("home and analytics are usable", async ({ page }, testInfo) => {
   await expect(page.getByText("Est. next tick", { exact: true })).toBeVisible();
   await expect(page.getByText("DATA SNAPSHOT", { exact: true })).toBeVisible();
   await expect(page.getByText("TICK TIMER", { exact: true })).toBeVisible();
+  await expect(page.getByText("BGS ALERTS", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Current warnings" }),
+  ).toBeVisible();
+  const currentAlerts = page.getByRole("list", {
+    name: "Current BGS alerts",
+  });
+  await expect(currentAlerts.getByRole("listitem")).toHaveCount(2);
+  await expect(currentAlerts).toContainText("Controller influence critical");
+  await expect(currentAlerts).toContainText("Competitor gained influence");
+  const currentAlertsUrl = new URL((await homeAlertsRequest).url());
+  expect(currentAlertsUrl.searchParams.get("scope")).toBe("all");
+  expect(currentAlertsUrl.searchParams.get("severity")).toBe("all");
+  expect(currentAlertsUrl.searchParams.get("limit")).toBe("200");
   await expect(
     page.getByRole("timer", { name: /Time to next tick/ }),
   ).toBeVisible();
@@ -49,6 +116,31 @@ test("home and analytics are usable", async ({ page }, testInfo) => {
     );
   expect(tickCardHeights).toHaveLength(2);
   expect(Math.abs(tickCardHeights[0] - tickCardHeights[1])).toBeLessThan(1);
+  const commandLayout = await page.locator(".home-grid").evaluate((grid) => {
+    const primary = grid.querySelector<HTMLElement>(".home-primary-column");
+    const secondary = grid.querySelector<HTMLElement>(".home-secondary-column");
+    const heights = (column: HTMLElement | null) =>
+      column
+        ? Array.from(column.children).map(
+            (element) => element.getBoundingClientRect().height,
+          )
+        : [];
+    return {
+      primaryCards: heights(primary),
+      secondaryCards: heights(secondary),
+      primaryTotal: primary?.getBoundingClientRect().height ?? 0,
+      secondaryTotal: secondary?.getBoundingClientRect().height ?? 0,
+    };
+  });
+  expect(commandLayout.primaryCards).toHaveLength(3);
+  expect(commandLayout.secondaryCards).toHaveLength(3);
+  expect(
+    Math.max(...commandLayout.primaryCards) -
+      Math.min(...commandLayout.primaryCards),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(commandLayout.primaryTotal - commandLayout.secondaryTotal),
+  ).toBeLessThan(1);
   const activityLayout = await page
     .locator(".home-activity")
     .evaluate((card) => {
@@ -66,7 +158,7 @@ test("home and analytics are usable", async ({ page }, testInfo) => {
   expect(activityLayout).not.toBeNull();
   expect(activityLayout?.bottomGap).toBeLessThan(35);
   if (testInfo.project.name !== "phone")
-    expect(activityLayout?.chartHeight).toBeGreaterThan(300);
+    expect(activityLayout?.chartHeight).toBeGreaterThan(180);
 
   const expectedColumns =
     testInfo.project.name === "desktop"

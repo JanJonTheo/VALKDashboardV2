@@ -9,36 +9,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useState } from "react";
-import type { BgsAlert, BgsRuleOwnerScope, BgsSeverity } from "@/lib/bgs-rules";
-
-interface Filters {
-  status: "all" | "active" | "resolved";
-  scope: "all" | BgsRuleOwnerScope;
-  severity: "all" | BgsSeverity;
-  system: string;
-}
-
-async function loadAlerts(
-  filters: Filters,
-): Promise<{ data: BgsAlert[]; unread_count: number }> {
-  const parameters = new URLSearchParams({
-    status: filters.status,
-    scope: filters.scope,
-    severity: filters.severity,
-  });
-  if (filters.system.trim()) parameters.set("system", filters.system.trim());
-  const response = await fetch(`/api/bgs-alerts?${parameters}`, {
-    cache: "no-store",
-  });
-  const payload = (await response.json()) as {
-    data?: BgsAlert[];
-    unread_count?: number;
-    error?: { message?: string };
-  };
-  if (!response.ok)
-    throw new Error(payload.error?.message ?? "Alerts could not be loaded");
-  return { data: payload.data ?? [], unread_count: payload.unread_count ?? 0 };
-}
+import { loadBgsAlerts, type BgsAlertFilters } from "@/lib/bgs-alerts-client";
 
 async function updateAlert(
   id: string,
@@ -58,7 +29,7 @@ async function updateAlert(
 
 export function BgsAlerts() {
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<Filters>({
+  const [filters, setFilters] = useState<BgsAlertFilters>({
     status: "all",
     scope: "all",
     severity: "all",
@@ -66,7 +37,7 @@ export function BgsAlerts() {
   });
   const query = useQuery({
     queryKey: ["bgs-alerts", filters],
-    queryFn: () => loadAlerts(filters),
+    queryFn: () => loadBgsAlerts(filters),
     refetchInterval: 60_000,
   });
   const mutation = useMutation({
@@ -122,7 +93,7 @@ export function BgsAlerts() {
             onChange={(event) =>
               setFilters({
                 ...filters,
-                status: event.target.value as Filters["status"],
+                status: event.target.value as BgsAlertFilters["status"],
               })
             }
           >
@@ -138,7 +109,7 @@ export function BgsAlerts() {
             onChange={(event) =>
               setFilters({
                 ...filters,
-                scope: event.target.value as Filters["scope"],
+                scope: event.target.value as BgsAlertFilters["scope"],
               })
             }
           >
@@ -154,7 +125,7 @@ export function BgsAlerts() {
             onChange={(event) =>
               setFilters({
                 ...filters,
-                severity: event.target.value as Filters["severity"],
+                severity: event.target.value as BgsAlertFilters["severity"],
               })
             }
           >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -22,6 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import { HomeActivityChart } from "@/components/home-activity-chart";
+import { HomeBgsAlerts } from "@/components/home-bgs-alerts";
 import type { DashboardSession } from "@/lib/access";
 import {
   formatTickCountdown,
@@ -101,6 +102,7 @@ async function getHome(): Promise<HomePayload> {
 }
 
 export function HomeDashboard({ session }: { session: DashboardSession }) {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["home", session.tenant.id],
     queryFn: getHome,
@@ -154,6 +156,13 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
   ];
   const generatedAt = data?.generated_at ? new Date(data.generated_at) : null;
   const tickSchedule = getTickSchedule(data?.last_tick);
+  const refreshAll = async () => {
+    window.dispatchEvent(new CustomEvent("valk:refresh"));
+    await Promise.all([
+      query.refetch(),
+      queryClient.invalidateQueries({ queryKey: ["bgs-alerts"] }),
+    ]);
+  };
 
   return (
     <>
@@ -171,7 +180,10 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
             <i />
             Current tick
           </span>
-          <button className="secondary-button" onClick={() => query.refetch()}>
+          <button
+            className="secondary-button"
+            onClick={() => void refreshAll()}
+          >
             <RefreshCw className={query.isFetching ? "spin" : ""} size={15} />
             Refresh all
           </button>
@@ -210,26 +222,72 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
       </section>
 
       <section className="home-grid">
-        <article className="surface home-activity">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">ACTIVITY</p>
-              <h2>Contribution share by commander</h2>
+        <div className="home-command-column home-primary-column">
+          <article className="surface home-activity">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">ACTIVITY</p>
+                <h2>Contribution share by commander</h2>
+              </div>
+              <Link href="/analytics/leaderboard?period=ct">
+                Full analytics <ArrowRight size={13} />
+              </Link>
             </div>
-            <Link href="/analytics/leaderboard?period=ct">
-              Full analytics <ArrowRight size={13} />
-            </Link>
-          </div>
-          {data?.activity.length ? (
-            <HomeActivityChart rows={data.activity} totals={data.metrics} />
-          ) : (
-            <p className="inline-empty">
-              No commander activity is recorded for the current tick.
-            </p>
-          )}
-        </article>
+            {data?.activity.length ? (
+              <HomeActivityChart rows={data.activity} totals={data.metrics} />
+            ) : (
+              <p className="inline-empty">
+                No commander activity is recorded for the current tick.
+              </p>
+            )}
+          </article>
 
-        <div className="tick-card-stack">
+          <HomeBgsAlerts tenantId={session.tenant.id} />
+
+          <article className="surface home-objectives">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">OPERATIONS</p>
+                <h2>Active objectives</h2>
+              </div>
+              <Link href="/operations/objectives?active=true">
+                View all <ArrowRight size={13} />
+              </Link>
+            </div>
+            {data?.objectives.length ? (
+              <div className="home-objective-list">
+                {data.objectives.map((item, index) => {
+                  const progress = Number(item.progress) || 0;
+                  return (
+                    <div
+                      className="home-objective"
+                      key={`${item.title}-${index}`}
+                    >
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <div>
+                        <strong>{item.title || "Untitled objective"}</strong>
+                        <small>{item.system || "No system"}</small>
+                        <div>
+                          <i style={{ width: `${Math.min(100, progress)}%` }} />
+                        </div>
+                      </div>
+                      <b>{formatValue(progress)}%</b>
+                      <em className={item.status === "Expired" ? "risk" : ""}>
+                        {item.status || "Active"}
+                      </em>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="inline-empty">
+                No active objectives are configured for this tenant.
+              </p>
+            )}
+          </article>
+        </div>
+
+        <div className="home-command-column home-secondary-column tick-card-stack">
           <article className="surface tick-card">
             <div className="section-heading">
               <div>
@@ -286,82 +344,40 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
             </div>
             <p>Next tick estimate = last observed tick + 24 hours.</p>
           </article>
+
+          <article className="surface command-tools">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">SHORTCUTS</p>
+                <h2>Command tools</h2>
+              </div>
+              <Gauge size={17} />
+            </div>
+            <div>
+              <Link href="/intelligence/systems">
+                <Activity size={16} />
+                <span>
+                  System lookup<small>EDDN intelligence</small>
+                </span>
+                <ArrowRight size={14} />
+              </Link>
+              <Link href="/operations/colonisation">
+                <Target size={16} />
+                <span>
+                  Colonisation<small>Construction progress</small>
+                </span>
+                <ArrowRight size={14} />
+              </Link>
+              <Link href="/intelligence/factions-24h">
+                <ShieldAlert size={16} />
+                <span>
+                  24h report<small>Faction movement</small>
+                </span>
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          </article>
         </div>
-
-        <article className="surface home-objectives">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">OPERATIONS</p>
-              <h2>Active objectives</h2>
-            </div>
-            <Link href="/operations/objectives?active=true">
-              View all <ArrowRight size={13} />
-            </Link>
-          </div>
-          {data?.objectives.length ? (
-            <div>
-              {data.objectives.map((item, index) => {
-                const progress = Number(item.progress) || 0;
-                return (
-                  <div
-                    className="home-objective"
-                    key={`${item.title}-${index}`}
-                  >
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <div>
-                      <strong>{item.title || "Untitled objective"}</strong>
-                      <small>{item.system || "No system"}</small>
-                      <div>
-                        <i style={{ width: `${Math.min(100, progress)}%` }} />
-                      </div>
-                    </div>
-                    <b>{formatValue(progress)}%</b>
-                    <em className={item.status === "Expired" ? "risk" : ""}>
-                      {item.status || "Active"}
-                    </em>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="inline-empty">
-              No active objectives are configured for this tenant.
-            </p>
-          )}
-        </article>
-
-        <article className="surface command-tools">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">SHORTCUTS</p>
-              <h2>Command tools</h2>
-            </div>
-            <Gauge size={17} />
-          </div>
-          <div>
-            <Link href="/intelligence/systems">
-              <Activity size={16} />
-              <span>
-                System lookup<small>EDDN intelligence</small>
-              </span>
-              <ArrowRight size={14} />
-            </Link>
-            <Link href="/operations/colonisation">
-              <Target size={16} />
-              <span>
-                Colonisation<small>Construction progress</small>
-              </span>
-              <ArrowRight size={14} />
-            </Link>
-            <Link href="/intelligence/factions-24h">
-              <ShieldAlert size={16} />
-              <span>
-                24h report<small>Faction movement</small>
-              </span>
-              <ArrowRight size={14} />
-            </Link>
-          </div>
-        </article>
 
         <article className="surface system-health">
           <div>

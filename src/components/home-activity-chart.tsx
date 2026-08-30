@@ -131,7 +131,7 @@ export function HomeActivityChart({
         <div className="home-chart-canvas" data-testid="home-activity-chart">
           <ReactECharts
             option={option}
-            style={{ height: "100%", minHeight: 300, width: "100%" }}
+            style={{ height: "100%", minHeight: 190, width: "100%" }}
             notMerge
             lazyUpdate
             opts={{ renderer: "canvas" }}
