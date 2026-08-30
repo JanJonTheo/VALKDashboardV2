@@ -15,6 +15,7 @@ export const bgsRuleConditionTypes = [
 export type BgsRuleConditionType = (typeof bgsRuleConditionTypes)[number];
 export type BgsRuleOwnerScope = "personal" | "tenant";
 export type BgsRuleTargetScope = "system" | "watchlist_all";
+export type BgsRuleTemplateTargetKind = "watchlist" | "protected_faction";
 export type BgsSeverity = "info" | "warning" | "critical";
 export type BgsAiReportType = "risk" | "strategy";
 
@@ -197,7 +198,9 @@ export interface BgsRulePackage {
   template_version: number;
   owner_scope: BgsRuleOwnerScope;
   owner_user_id: string | null;
-  watchlist_scope: "personal" | "global";
+  watchlist_scope: "personal" | "global" | "protected";
+  protected_faction_id: number | null;
+  protected_faction: ProtectedFactionSummary | null;
   personal_discord: boolean;
   tenant_discord: boolean;
   created_at: string;
@@ -208,6 +211,7 @@ export interface BgsRulePackage {
 export interface BgsRuleTemplate extends BgsRuleTemplateInput {
   id: string;
   version: number;
+  target_kind: BgsRuleTemplateTargetKind;
   archived: boolean;
   archived_at: string | null;
   created_at: string;
@@ -215,11 +219,21 @@ export interface BgsRuleTemplate extends BgsRuleTemplateInput {
   packages: BgsRulePackage[];
 }
 
+export interface ProtectedFactionSummary {
+  id: number;
+  name: string;
+  description: string;
+  active: boolean;
+  webhook_configured: boolean;
+}
+
 export interface BgsRuleCatalogPayload {
   data: BgsRuleTemplate[];
   discord_availability: { personal: boolean; global: boolean };
   can_manage_templates: boolean;
   can_apply_global: boolean;
+  can_apply_protected: boolean;
+  protected_factions: ProtectedFactionSummary[];
   generated_at: string;
 }
 

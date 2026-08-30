@@ -594,3 +594,205 @@ test("watchlist applies the tenant-faction catalog package", async ({
       discord: true,
     });
 });
+
+test("protected watchlist applies early warning to one faction", async ({
+  page,
+}) => {
+  await page.route("**/api/bgs-alerts**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ unread_count: 0, data: [] }),
+    }),
+  );
+  await page.route("**/api/preferences/bgs-system-watchlist-sort", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: null }),
+    }),
+  );
+  await page.route("**/api/system-watchlist/data", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ watchlist: [], data: [] }),
+    }),
+  );
+  await page.route("**/api/system-watchlist/protected**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [
+          {
+            requested_system: "Aegis Prime",
+            available: true,
+            system_info: {
+              system_name: "Aegis Prime",
+              controlling_faction: "Aegis Shield",
+              population: 1000,
+            },
+            factions: [{ name: "Aegis Shield", influence: 0.4 }],
+            history: [],
+            conflicts: [],
+            powerplays: [],
+          },
+        ],
+        generated_at: "2026-08-30T00:00:00Z",
+        pagination: { page: 1, page_size: 25, total: 1 },
+        filter_options: { allegiances: [], governments: [] },
+        protected_factions: [
+          {
+            id: 9,
+            name: "Aegis Shield",
+            description: "Protected ally",
+            webhook_configured: true,
+          },
+        ],
+        selected_protected_faction_id: null,
+      }),
+    }),
+  );
+  await page.route("**/api/bgs-rules", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [] }),
+    }),
+  );
+
+  let applied: unknown;
+  await page.route("**/api/bgs-rule-templates**", async (route) => {
+    if (route.request().url().endsWith("/apply")) {
+      applied = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: "protected-package-9",
+            template_id: "protected-early-warning",
+            template_version: 1,
+            owner_scope: "tenant",
+            owner_user_id: null,
+            watchlist_scope: "protected",
+            protected_faction_id: 9,
+            protected_faction: {
+              id: 9,
+              name: "Aegis Shield",
+              description: "Protected ally",
+              active: true,
+              webhook_configured: true,
+            },
+            personal_discord: false,
+            tenant_discord: true,
+            rules: [],
+            created_at: "2026-08-30T00:00:00Z",
+            updated_at: "2026-08-30T00:00:00Z",
+          },
+          already_applied: false,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [
+          {
+            id: "protected-early-warning",
+            name: "Protected Faction Early Warning",
+            description: "Four protected-faction transition rules.",
+            version: 1,
+            target_kind: "protected_faction",
+            default_discord: true,
+            archived: false,
+            archived_at: null,
+            created_at: "2026-08-30T00:00:00Z",
+            updated_at: "2026-08-30T00:00:00Z",
+            packages: [],
+            items: [
+              {
+                key: "loss",
+                name: "Protected faction influence loss",
+                condition: { type: "tenant_faction_loss", threshold_pp: 3 },
+                severity: "warning",
+              },
+              {
+                key: "conflict",
+                name: "Protected faction conflict",
+                condition: {
+                  type: "tenant_faction_new_conflict",
+                  conflict_types: ["election", "war"],
+                },
+                severity: "warning",
+              },
+              {
+                key: "below",
+                name: "Protected faction below threshold",
+                condition: { type: "tenant_faction_below", threshold_pp: 5 },
+                severity: "critical",
+              },
+              {
+                key: "gap",
+                name: "Protected faction closes the gap",
+                condition: { type: "tenant_faction_gap", threshold_pp: 2 },
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+        discord_availability: { personal: false, global: false },
+        can_manage_templates: false,
+        can_apply_global: true,
+        can_apply_protected: true,
+        protected_factions: [
+          {
+            id: 9,
+            name: "Aegis Shield",
+            description: "Protected ally",
+            active: true,
+            webhook_configured: true,
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/intelligence/watchlist");
+  await page.getByRole("tab", { name: "Protected factions watchlist" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Protected factions watchlist" }),
+  ).toBeVisible();
+  await expect(page.getByText("Aegis Prime", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Aegis Shield is present in this system"),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Rules" }).click();
+  await page.getByRole("button", { name: "Catalog" }).click();
+  await expect(page.getByText("Protected Faction Early Warning")).toBeVisible();
+  await page.getByRole("button", { name: "Apply template" }).click();
+  const applyDialog = page.getByRole("dialog", {
+    name: "Protected Faction Early Warning",
+  });
+  await expect(
+    applyDialog.getByRole("combobox", {
+      name: "Protected faction",
+      exact: true,
+    }),
+  ).toHaveValue("9");
+  await expect(
+    applyDialog.getByLabel("Send to the protected faction Discord webhook"),
+  ).toBeChecked();
+  await applyDialog.getByRole("button", { name: "Apply package" }).click();
+  await expect
+    .poll(() => applied)
+    .toEqual({
+      watchlist_scope: "protected",
+      protected_faction_id: 9,
+      discord: true,
+    });
+});

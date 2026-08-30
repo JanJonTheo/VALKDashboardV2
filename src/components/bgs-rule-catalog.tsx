@@ -42,7 +42,8 @@ async function loadCatalog(includeArchived: boolean) {
 
 async function applyTemplate(input: {
   templateId: string;
-  watchlistScope: "personal" | "global";
+  watchlistScope: "personal" | "global" | "protected";
+  protectedFactionId?: number;
   discord: boolean;
 }) {
   const response = await fetch(
@@ -52,6 +53,9 @@ async function applyTemplate(input: {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         watchlist_scope: input.watchlistScope,
+        ...(input.protectedFactionId
+          ? { protected_faction_id: input.protectedFactionId }
+          : {}),
         discord: input.discord,
       }),
     },
@@ -162,8 +166,17 @@ function emptyTemplate(): BgsRuleTemplateInput {
   };
 }
 
-function packageFor(template: BgsRuleTemplate, scope: "personal" | "global") {
-  return template.packages.find((item) => item.watchlist_scope === scope);
+function packageFor(
+  template: BgsRuleTemplate,
+  scope: "personal" | "global" | "protected",
+  protectedFactionId?: number,
+) {
+  return template.packages.find(
+    (item) =>
+      item.watchlist_scope === scope &&
+      (scope !== "protected" ||
+        item.protected_faction_id === protectedFactionId),
+  );
 }
 
 function conditionSummary(condition: BgsCondition) {
@@ -186,7 +199,10 @@ export function BgsRuleCatalog({
 }) {
   const queryClient = useQueryClient();
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [scope, setScope] = useState<"personal" | "global">("personal");
+  const [scope, setScope] = useState<"personal" | "global" | "protected">(
+    "personal",
+  );
+  const [protectedFactionId, setProtectedFactionId] = useState<number>();
   const [selectedTemplate, setSelectedTemplate] = useState<BgsRuleTemplate>();
   const [expandedPackage, setExpandedPackage] = useState<string>();
   const [editorOpen, setEditorOpen] = useState(false);
@@ -199,7 +215,13 @@ export function BgsRuleCatalog({
   });
   const availability = catalogQuery.data?.discord_availability;
   const [discord, setDiscord] = useState(true);
-  const currentAvailability = Boolean(availability?.[scope]);
+  const selectedProtectedFaction = (
+    catalogQuery.data?.protected_factions ?? []
+  ).find((faction) => faction.id === protectedFactionId);
+  const currentAvailability =
+    scope === "protected"
+      ? Boolean(selectedProtectedFaction?.webhook_configured)
+      : Boolean(availability?.[scope]);
 
   const invalidate = async () => {
     await Promise.all([
@@ -277,11 +299,22 @@ export function BgsRuleCatalog({
   }
 
   function openApply(template: BgsRuleTemplate) {
-    const nextScope =
-      scope === "global" && !catalogQuery.data?.can_apply_global
+    if ((template.target_kind ?? "watchlist") === "protected_faction") {
+      const firstFaction = catalogQuery.data?.protected_factions?.[0];
+      setScope("protected");
+      setProtectedFactionId(firstFaction?.id);
+      setDiscord(
+        template.default_discord && Boolean(firstFaction?.webhook_configured),
+      );
+      setSelectedTemplate(template);
+      return;
+    }
+    const nextScope: "personal" | "global" =
+      scope !== "global" || !catalogQuery.data?.can_apply_global
         ? "personal"
-        : scope;
+        : "global";
     setScope(nextScope);
+    setProtectedFactionId(undefined);
     setDiscord(
       template.default_discord &&
         Boolean(catalogQuery.data?.discord_availability[nextScope]),
@@ -330,9 +363,15 @@ export function BgsRuleCatalog({
         {templates.map((template) => {
           const personalPackage = packageFor(template, "personal");
           const globalPackage = packageFor(template, "global");
-          const packages = [personalPackage, globalPackage].filter(
-            (item): item is BgsRulePackage => Boolean(item),
-          );
+          const protectedTemplate =
+            (template.target_kind ?? "watchlist") === "protected_faction";
+          const packages = protectedTemplate
+            ? template.packages.filter(
+                (item) => item.watchlist_scope === "protected",
+              )
+            : [personalPackage, globalPackage].filter(
+                (item): item is BgsRulePackage => Boolean(item),
+              );
           return (
             <article
               key={template.id}
@@ -371,7 +410,10 @@ export function BgsRuleCatalog({
                         )
                       }
                     >
-                      <CheckCircle2 size={14} /> {item.watchlist_scope} applied
+                      <CheckCircle2 size={14} />{" "}
+                      {item.watchlist_scope === "protected"
+                        ? `${item.protected_faction?.name ?? "Unavailable faction"} applied`
+                        : `${item.watchlist_scope} applied`}
                     </button>
                     {updateAvailable && (
                       <button
@@ -402,16 +444,22 @@ export function BgsRuleCatalog({
                 );
               })}
               <footer>
-                {!template.archived && (
-                  <button
-                    className="primary-button"
-                    onClick={() => openApply(template)}
-                  >
-                    {personalPackage && (!canManageTenant || globalPackage)
-                      ? "Open / apply"
-                      : "Apply template"}
-                  </button>
-                )}
+                {!template.archived &&
+                  (!protectedTemplate ||
+                    catalogQuery.data?.can_apply_protected) && (
+                    <button
+                      className="primary-button"
+                      onClick={() => openApply(template)}
+                    >
+                      {protectedTemplate
+                        ? packages.length
+                          ? "Open / apply"
+                          : "Apply template"
+                        : personalPackage && (!canManageTenant || globalPackage)
+                          ? "Open / apply"
+                          : "Apply template"}
+                    </button>
+                  )}
                 {canManageTenant && (
                   <>
                     <button
@@ -463,27 +511,60 @@ export function BgsRuleCatalog({
                 <X size={18} />
               </Dialog.Close>
             </header>
-            <label>
-              <span>Watchlist</span>
-              <select
-                value={scope}
-                onChange={(event) => {
-                  const next = event.target.value as "personal" | "global";
-                  setScope(next);
-                  setDiscord(
-                    Boolean(selectedTemplate?.default_discord) &&
-                      Boolean(availability?.[next]),
-                  );
-                }}
-              >
-                <option value="personal">Personal watchlist</option>
-                {catalogQuery.data?.can_apply_global && (
-                  <option value="global">
-                    Global tenant-faction watchlist
-                  </option>
-                )}
-              </select>
-            </label>
+            {(selectedTemplate?.target_kind ?? "watchlist") ===
+            "protected_faction" ? (
+              <label>
+                <span>Protected faction</span>
+                <select
+                  aria-label="Protected faction"
+                  value={protectedFactionId ?? ""}
+                  onChange={(event) => {
+                    const nextId = Number(event.target.value);
+                    const faction = (
+                      catalogQuery.data?.protected_factions ?? []
+                    ).find((item) => item.id === nextId);
+                    setProtectedFactionId(nextId);
+                    setDiscord(
+                      Boolean(selectedTemplate?.default_discord) &&
+                        Boolean(faction?.webhook_configured),
+                    );
+                  }}
+                >
+                  {!catalogQuery.data?.protected_factions?.length && (
+                    <option value="">No active protected factions</option>
+                  )}
+                  {(catalogQuery.data?.protected_factions ?? []).map(
+                    (faction) => (
+                      <option value={faction.id} key={faction.id}>
+                        {faction.name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+            ) : (
+              <label>
+                <span>Watchlist</span>
+                <select
+                  value={scope}
+                  onChange={(event) => {
+                    const next = event.target.value as "personal" | "global";
+                    setScope(next);
+                    setDiscord(
+                      Boolean(selectedTemplate?.default_discord) &&
+                        Boolean(availability?.[next]),
+                    );
+                  }}
+                >
+                  <option value="personal">Personal watchlist</option>
+                  {catalogQuery.data?.can_apply_global && (
+                    <option value="global">
+                      Global tenant-faction watchlist
+                    </option>
+                  )}
+                </select>
+              </label>
+            )}
             <label className="check-row">
               <input
                 type="checkbox"
@@ -491,7 +572,12 @@ export function BgsRuleCatalog({
                 disabled={!currentAvailability}
                 onChange={(event) => setDiscord(event.target.checked)}
               />
-              Send to the {scope === "personal" ? "personal" : "tenant BGS"}{" "}
+              Send to the{" "}
+              {scope === "personal"
+                ? "personal"
+                : scope === "protected"
+                  ? "protected faction"
+                  : "tenant BGS"}{" "}
               Discord webhook
             </label>
             {!currentAvailability && (
@@ -500,27 +586,34 @@ export function BgsRuleCatalog({
                 remain enabled.
               </small>
             )}
-            {selectedTemplate && packageFor(selectedTemplate, scope) && (
-              <p className="inline-empty">
-                This template is already applied. Continue to open the existing
-                package.
-              </p>
-            )}
+            {selectedTemplate &&
+              packageFor(selectedTemplate, scope, protectedFactionId) && (
+                <p className="inline-empty">
+                  This template is already applied. Continue to open the
+                  existing package.
+                </p>
+              )}
             <footer>
               <Dialog.Close className="secondary-button">Cancel</Dialog.Close>
               <button
                 className="primary-button"
-                disabled={applyMutation.isPending || !selectedTemplate}
+                disabled={
+                  applyMutation.isPending ||
+                  !selectedTemplate ||
+                  (scope === "protected" && !protectedFactionId)
+                }
                 onClick={() =>
                   selectedTemplate &&
                   applyMutation.mutate({
                     templateId: selectedTemplate.id,
                     watchlistScope: scope,
+                    protectedFactionId,
                     discord,
                   })
                 }
               >
-                {selectedTemplate && packageFor(selectedTemplate, scope)
+                {selectedTemplate &&
+                packageFor(selectedTemplate, scope, protectedFactionId)
                   ? "Open package"
                   : "Apply package"}
               </button>

@@ -14,6 +14,7 @@ const template = {
   name: "Tenant Faction Early Warning",
   description: "Warn about tenant-faction risk transitions.",
   version: 1,
+  target_kind: "watchlist",
   default_discord: true,
   archived: false,
   archived_at: null,
@@ -59,6 +60,19 @@ const template = {
   ],
 };
 
+const protectedTemplate = {
+  ...template,
+  id: "bgs-protected-faction-early-warning",
+  name: "Protected Faction Early Warning",
+  description: "Warn about a selected protected faction.",
+  target_kind: "protected_faction",
+  items: template.items.map((item) => ({
+    ...item,
+    key: item.key.replace("tenant", "protected"),
+    name: item.name.replace("Tenant faction", "Protected faction"),
+  })),
+};
+
 describe("BGS rule catalog", () => {
   const fetchMock = vi.fn();
 
@@ -74,6 +88,8 @@ describe("BGS rule catalog", () => {
               discord_availability: { personal: true, global: false },
               can_manage_templates: false,
               can_apply_global: false,
+              can_apply_protected: false,
+              protected_factions: [],
               generated_at: "2026-08-30T00:00:00Z",
             });
           if (url.endsWith("/apply") && init?.method === "POST")
@@ -144,6 +160,98 @@ describe("BGS rule catalog", () => {
             String(input).endsWith("/apply") &&
             init?.method === "POST" &&
             JSON.parse(String(init.body)).discord === true,
+        ),
+      ).toBe(true),
+    );
+    queryClient.clear();
+  });
+
+  it("applies the protected template to the selected faction webhook", async () => {
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("/api/bgs-rule-templates") && !init?.method)
+          return Response.json({
+            data: [template, protectedTemplate],
+            discord_availability: { personal: true, global: false },
+            can_manage_templates: true,
+            can_apply_global: true,
+            can_apply_protected: true,
+            protected_factions: [
+              {
+                id: 9,
+                name: "Aegis Shield",
+                description: "Protected ally",
+                active: true,
+                webhook_configured: true,
+              },
+            ],
+            generated_at: "2026-08-30T00:00:00Z",
+          });
+        if (url.endsWith("/apply") && init?.method === "POST")
+          return Response.json(
+            {
+              data: {
+                id: "package-protected",
+                template_id: protectedTemplate.id,
+                template_version: 1,
+                owner_scope: "tenant",
+                owner_user_id: null,
+                watchlist_scope: "protected",
+                protected_faction_id: 9,
+                protected_faction: {
+                  id: 9,
+                  name: "Aegis Shield",
+                  description: "Protected ally",
+                  active: true,
+                  webhook_configured: true,
+                },
+                personal_discord: false,
+                tenant_discord: true,
+                rules: [],
+                created_at: "2026-08-30T00:00:00Z",
+                updated_at: "2026-08-30T00:00:00Z",
+              },
+              already_applied: false,
+            },
+            { status: 201 },
+          );
+        return Response.json(
+          { error: { message: "Unexpected request" } },
+          { status: 500 },
+        );
+      },
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BgsRuleCatalog canManageTenant />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("Protected Faction Early Warning");
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Apply template" })[1],
+    );
+    expect(screen.getByLabelText("Protected faction")).toHaveValue("9");
+    expect(
+      screen.getByLabelText("Send to the protected faction Discord webhook"),
+    ).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Apply package" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/apply") &&
+            init?.method === "POST" &&
+            JSON.parse(String(init.body)).watchlist_scope === "protected" &&
+            JSON.parse(String(init.body)).protected_faction_id === 9,
         ),
       ).toBe(true),
     );

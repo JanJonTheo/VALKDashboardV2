@@ -212,6 +212,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/system-watchlist/protected": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getProtectedSystemWatchlist"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/dashboard/bgs/rules": {
     parameters: {
       query?: never;
@@ -624,6 +640,37 @@ export interface components {
       archived?: boolean;
       items: components["schemas"]["BgsRuleTemplateItem"][];
     };
+    ProtectedFactionSummary: {
+      id: number;
+      name: string;
+      description: string;
+      active: boolean;
+      webhook_configured: boolean;
+    };
+    ProtectedWatchlistFaction: {
+      id: number;
+      name: string;
+      description: string;
+      webhook_configured: boolean;
+    };
+    ProtectedWatchlistResponse: {
+      data: {
+        [key: string]: unknown;
+      }[];
+      /** Format: date-time */
+      generated_at: string;
+      pagination: components["schemas"]["Pagination"];
+      filter_options: {
+        allegiances: components["schemas"]["WatchlistFilterOption"][];
+        governments: components["schemas"]["WatchlistFilterOption"][];
+      };
+      protected_factions: components["schemas"]["ProtectedWatchlistFaction"][];
+      selected_protected_faction_id: number | null;
+    };
+    WatchlistFilterOption: {
+      value: string;
+      label: string;
+    };
     BgsRulePackage: {
       /** Format: uuid */
       id: string;
@@ -633,7 +680,10 @@ export interface components {
       owner_scope: "personal" | "tenant";
       owner_user_id?: string | null;
       /** @enum {string} */
-      watchlist_scope: "personal" | "global";
+      watchlist_scope: "personal" | "global" | "protected";
+      protected_faction_id: number | null;
+      protected_faction:
+        components["schemas"]["ProtectedFactionSummary"] | null;
       personal_discord: boolean;
       tenant_discord: boolean;
       rules: components["schemas"]["BgsRule"][];
@@ -645,6 +695,8 @@ export interface components {
     BgsRuleTemplate: components["schemas"]["BgsRuleTemplateInput"] & {
       id: string;
       version: number;
+      /** @enum {string} */
+      target_kind: "watchlist" | "protected_faction";
       archived: boolean;
       /** Format: date-time */
       archived_at: string | null;
@@ -1009,6 +1061,46 @@ export interface operations {
       default: components["responses"]["ErrorResponse"];
     };
   };
+  getProtectedSystemWatchlist: {
+    parameters: {
+      query?: {
+        protected_faction_id?: number;
+        page?: components["parameters"]["Page"];
+        sort?:
+          | "system"
+          | "population"
+          | "updatedAt"
+          | "controllingFaction"
+          | "allegiance"
+          | "government";
+        direction?: components["parameters"]["Direction"];
+        system?: string;
+        controlling_faction?: string;
+        population_min?: number;
+        population_max?: number;
+        updated_from?: string;
+        updated_to?: string;
+        allegiance?: string;
+        government?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paged union of systems containing active protected factions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProtectedWatchlistResponse"];
+        };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
   listBgsRules: {
     parameters: {
       query?: never;
@@ -1132,6 +1224,8 @@ export interface operations {
             };
             can_manage_templates: boolean;
             can_apply_global: boolean;
+            can_apply_protected: boolean;
+            protected_factions: components["schemas"]["ProtectedFactionSummary"][];
             /** Format: date-time */
             generated_at: string;
           };
@@ -1201,7 +1295,8 @@ export interface operations {
       content: {
         "application/json": {
           /** @enum {string} */
-          watchlist_scope: "personal" | "global";
+          watchlist_scope: "personal" | "global" | "protected";
+          protected_faction_id?: number;
           discord: boolean;
         };
       };

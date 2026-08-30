@@ -39,6 +39,39 @@ const globalPayload = {
   },
 };
 
+const protectedPayload = {
+  ...globalPayload,
+  data: [
+    {
+      ...globalPayload.data[0],
+      requested_system: "Guardian",
+      system_info: {
+        ...globalPayload.data[0].system_info,
+        system_name: "Guardian",
+      },
+      factions: [
+        {
+          name: "Aegis Shield",
+          influence: 0.24,
+          allegiance: "Independent",
+          government: "Cooperative",
+          active_states: [],
+          pending_states: [],
+        },
+      ],
+    },
+  ],
+  protected_factions: [
+    {
+      id: 7,
+      name: "Aegis Shield",
+      description: "Protected ally",
+      webhook_configured: true,
+    },
+  ],
+  selected_protected_faction_id: null,
+};
+
 describe("SystemWatchlist scopes", () => {
   const fetchMock = vi.fn();
 
@@ -58,12 +91,28 @@ describe("SystemWatchlist scopes", () => {
             });
           if (url.startsWith("/api/system-watchlist/global?"))
             return Response.json(globalPayload);
+          if (url.startsWith("/api/system-watchlist/protected?"))
+            return Response.json({
+              ...protectedPayload,
+              selected_protected_faction_id: url.includes(
+                "protected_faction_id=7",
+              )
+                ? 7
+                : null,
+            });
           if (url === "/api/system-watchlist" && init?.method === "PUT")
             return Response.json({ data: {} });
           return Response.json({ data: [] });
         },
       );
     vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
   });
 
   afterEach(() => {
@@ -152,6 +201,57 @@ describe("SystemWatchlist scopes", () => {
         { system: "Alpha", sector: "", projectName: "", favorite: false },
       ],
     });
+    queryClient.clear();
+  });
+
+  it("loads protected factions lazily and filters to one faction", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SystemWatchlist
+          tenantFactionName="East India Company"
+          canManageTenantRules
+          canRunBgsAi={false}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).startsWith("/api/system-watchlist/protected?"),
+      ),
+    ).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: "Protected factions watchlist" }),
+    );
+    await screen.findByRole("heading", {
+      name: "Protected factions watchlist",
+    });
+    await screen.findByText("Guardian");
+    expect(screen.getByLabelText("Protected faction")).toHaveValue("all");
+    expect(screen.getByLabelText("Protected faction")).toHaveTextContent(
+      "Aegis Shield",
+    );
+    expect(
+      screen.getByLabelText("Aegis Shield is present in this system"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Protected faction"), {
+      target: { value: "7" },
+    });
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("protected_faction_id=7"),
+        ),
+      ).toBe(true),
+    );
     queryClient.clear();
   });
 });

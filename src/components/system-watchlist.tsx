@@ -84,7 +84,7 @@ interface SortPreferenceEnvelope {
   data: { payload?: { sorting?: { id?: string; desc?: boolean }[] } } | null;
 }
 
-type WatchlistScope = "personal" | "global";
+type WatchlistScope = "personal" | "global" | "protected";
 
 interface GlobalWatchlistPayload {
   systems: WatchedSystem[];
@@ -94,6 +94,18 @@ interface GlobalWatchlistPayload {
     allegiances: GlobalWatchlistFilterOption[];
     governments: GlobalWatchlistFilterOption[];
   };
+}
+
+interface ProtectedFactionSummary {
+  id: number;
+  name: string;
+  description: string;
+  webhook_configured: boolean;
+}
+
+interface ProtectedWatchlistPayload extends GlobalWatchlistPayload {
+  protectedFactions: ProtectedFactionSummary[];
+  selectedProtectedFactionId: number | null;
 }
 
 const watchlistSortPreferenceKey = "bgs-system-watchlist-sort";
@@ -276,6 +288,80 @@ async function loadGlobalWatchlist(
         ? (filterOptions.governments as GlobalWatchlistFilterOption[])
         : [],
     },
+  };
+}
+
+async function loadProtectedWatchlist(
+  page: number,
+  sortField: GlobalWatchlistSortField,
+  sortDescending: boolean,
+  filters: WatchlistFilters,
+  protectedFactionId: number | null,
+): Promise<ProtectedWatchlistPayload> {
+  const parameters = new URLSearchParams({
+    page: String(page),
+    sort: sortField,
+    direction: sortDescending ? "desc" : "asc",
+  });
+  if (protectedFactionId !== null)
+    parameters.set("protected_faction_id", String(protectedFactionId));
+  const optionalParameters: Record<string, string> = {
+    system: filters.system,
+    controlling_faction: filters.controllingFaction,
+    population_min: filters.populationMin,
+    population_max: filters.populationMax,
+    updated_from: filters.updatedFrom,
+    updated_to: filters.updatedTo,
+    allegiance: filters.allegiance,
+    government: filters.government,
+  };
+  Object.entries(optionalParameters).forEach(([key, value]) => {
+    if (value) parameters.set(key, value);
+  });
+  const response = await fetch(
+    `/api/system-watchlist/protected?${parameters}`,
+    {
+      cache: "no-store",
+    },
+  );
+  const payload = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (!response.ok)
+    throw new Error(
+      ((payload?.error as { message?: string } | undefined)?.message as
+        string | undefined) ?? "The protected-faction watchlist is unavailable",
+    );
+  const pagination = (payload?.pagination ?? {}) as Record<string, unknown>;
+  const filterOptions = (payload?.filter_options ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    systems: normalizeWatchedSystems(payload),
+    generatedAt: String(payload?.generated_at ?? new Date().toISOString()),
+    pagination: {
+      page: Number(pagination.page) || page,
+      pageSize: Number(pagination.page_size) || globalWatchlistPageSize,
+      total: Number(pagination.total) || 0,
+    },
+    filterOptions: {
+      allegiances: Array.isArray(filterOptions.allegiances)
+        ? (filterOptions.allegiances as GlobalWatchlistFilterOption[])
+        : [],
+      governments: Array.isArray(filterOptions.governments)
+        ? (filterOptions.governments as GlobalWatchlistFilterOption[])
+        : [],
+    },
+    protectedFactions: Array.isArray(payload?.protected_factions)
+      ? (payload.protected_factions as ProtectedFactionSummary[])
+      : [],
+    selectedProtectedFactionId:
+      payload?.selected_protected_faction_id === null ||
+      payload?.selected_protected_faction_id === undefined
+        ? null
+        : Number(payload.selected_protected_faction_id),
   };
 }
 
@@ -1306,6 +1392,7 @@ export function SystemStrip({
   entry,
   system,
   tenantFactionName,
+  presenceFactionNames,
   saving,
   onToggleFavorite,
   onDelete,
@@ -1319,6 +1406,7 @@ export function SystemStrip({
   entry: SystemWatchlistEntry;
   system: WatchedSystem;
   tenantFactionName: string;
+  presenceFactionNames?: string[];
   saving: boolean;
   onToggleFavorite?: () => void;
   onDelete?: () => void;
@@ -1331,7 +1419,16 @@ export function SystemStrip({
   const [activeFaction, setActiveFaction] = useState<string>();
   const [detailOpen, setDetailOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
-  const tenantFactionPresent = hasTenantFaction(system, tenantFactionName);
+  const matchedPresenceFactions = useMemo(() => {
+    const candidates = presenceFactionNames?.length
+      ? presenceFactionNames
+      : tenantFactionName
+        ? [tenantFactionName]
+        : [];
+    return candidates.filter((name) => hasTenantFaction(system, name));
+  }, [presenceFactionNames, system, tenantFactionName]);
+  const tenantFactionPresent = matchedPresenceFactions.length > 0;
+  const presenceDescription = matchedPresenceFactions.join(", ");
   return (
     <article
       className={`system-watch-strip${system.available ? "" : " unavailable"}${entry.favorite ? " favorite" : ""}${tenantFactionPresent ? " tenant-present" : ""}`}
@@ -1342,8 +1439,8 @@ export function SystemStrip({
             {tenantFactionPresent && (
               <span
                 className="tenant-presence-badge"
-                title={`${tenantFactionName} is present in this system`}
-                aria-label={`${tenantFactionName} is present in this system`}
+                title={`${presenceDescription} ${matchedPresenceFactions.length === 1 ? "is" : "are"} present in this system`}
+                aria-label={`${presenceDescription} ${matchedPresenceFactions.length === 1 ? "is" : "are"} present in this system`}
               >
                 <ShieldCheck size={13} aria-hidden="true" />
               </span>
@@ -1671,7 +1768,13 @@ function WatchlistFilterSheet({
           <div className="sheet-heading">
             <div>
               <Dialog.Title>
-                Filter {scope === "personal" ? "personal" : "global"} watchlist
+                Filter{" "}
+                {scope === "personal"
+                  ? "personal"
+                  : scope === "global"
+                    ? "global"
+                    : "protected-faction"}{" "}
+                watchlist
               </Dialog.Title>
               <Dialog.Description>
                 Filters apply to the current system facts. Empty fields include
@@ -2519,6 +2622,383 @@ function GlobalSystemWatchlist({
   );
 }
 
+function ProtectedFactionsSystemWatchlist({
+  active,
+  tenantFactionName,
+  canManageTenantRules,
+  canRunBgsAi,
+}: {
+  active: boolean;
+  tenantFactionName: string;
+  canManageTenantRules: boolean;
+  canRunBgsAi: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState<WatchlistFilters>({
+    ...emptyWatchlistFilters,
+  });
+  const [sortField, setSortField] =
+    useState<GlobalWatchlistSortField>("system");
+  const [sortDescending, setSortDescending] = useState(false);
+  const [selectedFactionId, setSelectedFactionId] = useState<number | null>(
+    null,
+  );
+  const [page, setPage] = useState(1);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [ruleSystem, setRuleSystem] = useState<string>();
+  const personalQuery = useQuery({
+    queryKey: ["system-watchlist-data"],
+    queryFn: loadWatchlist,
+    refetchInterval: false,
+  });
+  const query = useQuery({
+    queryKey: [
+      "system-watchlist-protected",
+      selectedFactionId,
+      page,
+      sortField,
+      sortDescending,
+      filters,
+    ],
+    queryFn: () =>
+      loadProtectedWatchlist(
+        page,
+        sortField,
+        sortDescending,
+        filters,
+        selectedFactionId,
+      ),
+    enabled: active,
+    placeholderData: (previous) => previous,
+    refetchInterval: active ? 60_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const mutation = useMutation({
+    mutationFn: saveWatchlist,
+    onMutate: async (systems) => {
+      await queryClient.cancelQueries({ queryKey: ["system-watchlist-data"] });
+      const previous = queryClient.getQueryData<WatchlistPayload>([
+        "system-watchlist-data",
+      ]);
+      queryClient.setQueryData<WatchlistPayload>(
+        ["system-watchlist-data"],
+        (current) => (current ? { ...current, watchlist: systems } : current),
+      );
+      return { previous };
+    },
+    onError: (_error, _systems, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(["system-watchlist-data"], context.previous);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["system-watchlist-data"],
+      });
+    },
+  });
+  const personalWatchlist = useMemo(
+    () => personalQuery.data?.watchlist ?? [],
+    [personalQuery.data?.watchlist],
+  );
+  const personalSystems = useMemo(
+    () =>
+      new Set(
+        personalWatchlist.map((entry) => entry.system.toLocaleLowerCase("en")),
+      ),
+    [personalWatchlist],
+  );
+  const protectedFactions = query.data?.protectedFactions ?? [];
+  const selectedFaction = protectedFactions.find(
+    (faction) => faction.id === selectedFactionId,
+  );
+  const presenceFactionNames = selectedFaction
+    ? [selectedFaction.name]
+    : protectedFactions.map((faction) => faction.name);
+  const total = query.data?.pagination.total ?? 0;
+  const pageSize = query.data?.pagination.pageSize ?? globalWatchlistPageSize;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total ? (page - 1) * pageSize + 1 : 0;
+  const rangeEnd = Math.min(page * pageSize, total);
+  const filterCount = activeFilterCount(filters, "protected");
+  const ruleSystems = [
+    ...new Set([
+      ...personalWatchlist.map((entry) => entry.system),
+      ...(ruleSystem ? [ruleSystem] : []),
+    ]),
+  ].sort((left, right) => left.localeCompare(right, "en"));
+
+  return (
+    <>
+      <header className="page-header watchlist-page-header">
+        <div>
+          <p className="eyebrow">INTELLIGENCE / PROTECTED FACTIONS WATCHLIST</p>
+          <h1>Protected factions watchlist</h1>
+          <p>
+            Systems containing active protected factions, with current EDDN
+            faction data and seven-day influence history.
+          </p>
+        </div>
+        <div>
+          <span className="live-status">
+            <i /> 60s refresh
+          </span>
+          <button
+            className="secondary-button"
+            onClick={() => query.refetch()}
+            disabled={query.isFetching}
+          >
+            <RefreshCw className={query.isFetching ? "spin" : ""} size={15} />
+            Refresh
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setRuleSystem(undefined);
+              setRulesOpen(true);
+            }}
+          >
+            <BellRing size={15} /> Rules
+          </button>
+          <small>
+            {query.data?.generatedAt
+              ? `Updated ${formatUpdated(query.data.generatedAt)}`
+              : "Loading protected factions…"}
+          </small>
+        </div>
+      </header>
+
+      <section className="surface watchlist-toolbar watchlist-toolbar-global watchlist-toolbar-protected">
+        <div className="watchlist-summary">
+          <strong>{total}</strong>
+          <span>protected-faction systems</span>
+          <span
+            className="watchlist-presence-key"
+            title={
+              selectedFaction
+                ? `Systems containing ${selectedFaction.name}`
+                : "Systems containing any active protected faction"
+            }
+          >
+            <ShieldCheck size={13} aria-hidden="true" />
+            <span>{selectedFaction?.name ?? "All protected factions"}</span>
+          </span>
+        </div>
+        <label className="watchlist-protected-select">
+          <span>Protected faction</span>
+          <select
+            aria-label="Protected faction"
+            value={selectedFactionId ?? "all"}
+            onChange={(event) => {
+              setSelectedFactionId(
+                event.target.value === "all"
+                  ? null
+                  : Number(event.target.value),
+              );
+              setPage(1);
+            }}
+          >
+            <option value="all">All protected factions</option>
+            {protectedFactions.map((faction) => (
+              <option value={faction.id} key={faction.id}>
+                {faction.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="watchlist-filter-button"
+          onClick={() => setFilterOpen(true)}
+        >
+          <ListFilter size={14} aria-hidden="true" />
+          Filters
+          {filterCount > 0 && <span>{filterCount}</span>}
+        </button>
+        <div className="watchlist-sort-controls">
+          <label>
+            <span className="sr-only">Sort protected-faction systems by</span>
+            <select
+              value={sortField}
+              onChange={(event) => {
+                setSortField(event.target.value as GlobalWatchlistSortField);
+                setPage(1);
+              }}
+              aria-label="Sort protected-faction systems by"
+            >
+              {globalWatchlistSortOptions.map((option) => (
+                <option value={option.value} key={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setSortDescending((current) => !current);
+              setPage(1);
+            }}
+            aria-label={`Sort ${sortDescending ? "ascending" : "descending"}`}
+            title={`Currently ${sortDescending ? "descending" : "ascending"}; click to reverse`}
+          >
+            <ArrowDownUp size={14} aria-hidden="true" />
+            <span>{sortDescending ? "Descending" : "Ascending"}</span>
+          </button>
+        </div>
+      </section>
+
+      {(query.isError || mutation.isError || personalQuery.isError) && (
+        <div className="error-banner" role="alert">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Could not load the protected-faction watchlist</strong>
+            <span>
+              {query.error?.message ??
+                mutation.error?.message ??
+                personalQuery.error?.message}
+            </span>
+          </div>
+          <button onClick={() => query.refetch()}>Retry</button>
+        </div>
+      )}
+
+      {!query.isLoading && !query.isError && !protectedFactions.length && (
+        <section className="surface watchlist-empty">
+          <ShieldCheck size={24} />
+          <div>
+            <strong>No active protected factions</strong>
+            <span>
+              Add or activate a protected faction on the EICFlaskServer first.
+            </span>
+          </div>
+        </section>
+      )}
+
+      {!query.isLoading &&
+        !query.isError &&
+        protectedFactions.length > 0 &&
+        total === 0 && (
+          <section className="surface watchlist-empty">
+            <Activity size={24} />
+            <div>
+              <strong>
+                {filterCount > 0
+                  ? "No matching protected-faction systems"
+                  : selectedFaction
+                    ? "Faction currently has no EDDN systems"
+                    : "No protected-faction systems available"}
+              </strong>
+              <span>
+                {filterCount > 0
+                  ? "Clear filters to show all available systems."
+                  : selectedFaction
+                    ? `No current EDDN system contains ${selectedFaction.name}.`
+                    : "Wait for the next EDDN faction update."}
+              </span>
+            </div>
+          </section>
+        )}
+
+      <section className="system-watch-list" aria-busy={query.isLoading}>
+        {query.isLoading && (
+          <p className="inline-empty">Loading protected-faction systems…</p>
+        )}
+        {(query.data?.systems ?? []).map((system) => {
+          const entry: SystemWatchlistEntry = {
+            system: system.requestedSystem || system.name,
+            sector: "",
+            projectName: "",
+            favorite: false,
+          };
+          const alreadyPersonal = personalSystems.has(
+            entry.system.toLocaleLowerCase("en"),
+          );
+          return (
+            <SystemStrip
+              scope="protected"
+              key={entry.system.toLocaleLowerCase("en")}
+              entry={entry}
+              system={system}
+              tenantFactionName={tenantFactionName}
+              presenceFactionNames={presenceFactionNames}
+              saving={mutation.isPending}
+              canRunBgsAi={canRunBgsAi}
+              alreadyPersonal={alreadyPersonal}
+              personalWatchlistFull={personalWatchlist.length >= 100}
+              onAddToPersonal={() => {
+                if (alreadyPersonal || personalWatchlist.length >= 100) return;
+                mutation.mutate([...personalWatchlist, entry]);
+              }}
+              onCreateRule={() => {
+                setRuleSystem(entry.system);
+                setRulesOpen(true);
+              }}
+            />
+          );
+        })}
+      </section>
+
+      {total > 0 && (
+        <nav
+          className="surface watchlist-pagination"
+          aria-label="Protected-faction watchlist pages"
+        >
+          <span>
+            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of{" "}
+            {total.toLocaleString()}
+          </span>
+          <div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page <= 1 || query.isFetching}
+            >
+              <ChevronLeft size={14} aria-hidden="true" /> Previous
+            </button>
+            <strong>
+              Page {page.toLocaleString()} of {totalPages.toLocaleString()}
+            </strong>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+              disabled={page >= totalPages || query.isFetching}
+            >
+              Next <ChevronRight size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </nav>
+      )}
+
+      <WatchlistFilterSheet
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+        scope="protected"
+        filters={filters}
+        sectors={[]}
+        allegianceOptions={query.data?.filterOptions.allegiances ?? []}
+        governmentOptions={query.data?.filterOptions.governments ?? []}
+        onApply={(nextFilters) => {
+          setFilters({ ...nextFilters, sector: "" });
+          setPage(1);
+        }}
+      />
+      <BgsRuleManager
+        key={`${ruleSystem ?? "protected"}-${rulesOpen ? "open" : "closed"}`}
+        open={rulesOpen}
+        onOpenChange={setRulesOpen}
+        initialSystem={ruleSystem}
+        systems={ruleSystems}
+        canManageTenant={canManageTenantRules}
+      />
+    </>
+  );
+}
+
 export function SystemWatchlist({
   tenantFactionName,
   canManageTenantRules,
@@ -2552,6 +3032,14 @@ export function SystemWatchlist({
         >
           Global watchlist
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={scope === "protected"}
+          onClick={() => setScope("protected")}
+        >
+          Protected factions watchlist
+        </button>
       </nav>
       <div hidden={scope !== "personal"} role="tabpanel">
         <PersonalSystemWatchlist
@@ -2564,6 +3052,14 @@ export function SystemWatchlist({
       <div hidden={scope !== "global"} role="tabpanel">
         <GlobalSystemWatchlist
           active={scope === "global"}
+          tenantFactionName={tenantFactionName}
+          canManageTenantRules={canManageTenantRules}
+          canRunBgsAi={canRunBgsAi}
+        />
+      </div>
+      <div hidden={scope !== "protected"} role="tabpanel">
+        <ProtectedFactionsSystemWatchlist
+          active={scope === "protected"}
           tenantFactionName={tenantFactionName}
           canManageTenantRules={canManageTenantRules}
           canRunBgsAi={canRunBgsAi}

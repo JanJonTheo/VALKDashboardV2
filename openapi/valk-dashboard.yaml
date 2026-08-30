@@ -232,6 +232,80 @@ paths:
           "200": { $ref: "#/components/responses/DataResponse" },
           default: { $ref: "#/components/responses/ErrorResponse" },
         }
+  /system-watchlist/protected:
+    get:
+      operationId: getProtectedSystemWatchlist
+      security: [{ dashboardBearer: [] }]
+      parameters:
+        - {
+            name: protected_faction_id,
+            in: query,
+            schema: { type: integer, minimum: 1 },
+          }
+        - { $ref: "#/components/parameters/Page" }
+        - {
+            name: sort,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum:
+                  [
+                    system,
+                    population,
+                    updatedAt,
+                    controllingFaction,
+                    allegiance,
+                    government,
+                  ],
+                default: system,
+              },
+          }
+        - { $ref: "#/components/parameters/Direction" }
+        - { name: system, in: query, schema: { type: string, maxLength: 255 } }
+        - {
+            name: controlling_faction,
+            in: query,
+            schema: { type: string, maxLength: 255 },
+          }
+        - {
+            name: population_min,
+            in: query,
+            schema: { type: number, minimum: 0 },
+          }
+        - {
+            name: population_max,
+            in: query,
+            schema: { type: number, minimum: 0 },
+          }
+        - {
+            name: updated_from,
+            in: query,
+            schema: { type: string, format: date },
+          }
+        - {
+            name: updated_to,
+            in: query,
+            schema: { type: string, format: date },
+          }
+        - {
+            name: allegiance,
+            in: query,
+            schema: { type: string, maxLength: 120 },
+          }
+        - {
+            name: government,
+            in: query,
+            schema: { type: string, maxLength: 160 },
+          }
+      responses:
+        "200":
+          description: Paged union of systems containing active protected factions
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ProtectedWatchlistResponse" }
+        default: { $ref: "#/components/responses/ErrorResponse" }
   /dashboard/bgs/rules:
     get:
       operationId: listBgsRules
@@ -323,6 +397,8 @@ paths:
                     discord_availability,
                     can_manage_templates,
                     can_apply_global,
+                    can_apply_protected,
+                    protected_factions,
                     generated_at,
                   ]
                 properties:
@@ -339,6 +415,11 @@ paths:
                       global: { type: boolean }
                   can_manage_templates: { type: boolean }
                   can_apply_global: { type: boolean }
+                  can_apply_protected: { type: boolean }
+                  protected_factions:
+                    type: array
+                    items:
+                      { $ref: "#/components/schemas/ProtectedFactionSummary" }
                   generated_at: { type: string, format: date-time }
         default: { $ref: "#/components/responses/ErrorResponse" }
     post:
@@ -393,7 +474,9 @@ paths:
               type: object
               required: [watchlist_scope, discord]
               properties:
-                watchlist_scope: { type: string, enum: [personal, global] }
+                watchlist_scope:
+                  { type: string, enum: [personal, global, protected] }
+                protected_faction_id: { type: integer, minimum: 1 }
                 discord: { type: boolean }
       responses:
         "200": { description: Existing package }
@@ -940,6 +1023,60 @@ components:
           minItems: 1
           maxItems: 20
           items: { $ref: "#/components/schemas/BgsRuleTemplateItem" }
+    ProtectedFactionSummary:
+      type: object
+      required: [id, name, description, active, webhook_configured]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        description: { type: string }
+        active: { type: boolean }
+        webhook_configured: { type: boolean }
+    ProtectedWatchlistFaction:
+      type: object
+      required: [id, name, description, webhook_configured]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        description: { type: string }
+        webhook_configured: { type: boolean }
+    ProtectedWatchlistResponse:
+      type: object
+      required:
+        [
+          data,
+          generated_at,
+          pagination,
+          filter_options,
+          protected_factions,
+          selected_protected_faction_id,
+        ]
+      properties:
+        data:
+          type: array
+          items: { type: object, additionalProperties: true }
+        generated_at: { type: string, format: date-time }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        filter_options:
+          type: object
+          required: [allegiances, governments]
+          properties:
+            allegiances:
+              type: array
+              items: { $ref: "#/components/schemas/WatchlistFilterOption" }
+            governments:
+              type: array
+              items: { $ref: "#/components/schemas/WatchlistFilterOption" }
+        protected_factions:
+          type: array
+          items: { $ref: "#/components/schemas/ProtectedWatchlistFaction" }
+        selected_protected_faction_id: { type: [integer, "null"] }
+    WatchlistFilterOption:
+      type: object
+      required: [value, label]
+      properties:
+        value: { type: string }
+        label: { type: string }
     BgsRulePackage:
       type: object
       required:
@@ -949,6 +1086,8 @@ components:
           template_version,
           owner_scope,
           watchlist_scope,
+          protected_faction_id,
+          protected_faction,
           personal_discord,
           tenant_discord,
           rules,
@@ -961,7 +1100,12 @@ components:
         template_version: { type: integer, minimum: 1 }
         owner_scope: { type: string, enum: [personal, tenant] }
         owner_user_id: { type: [string, "null"] }
-        watchlist_scope: { type: string, enum: [personal, global] }
+        watchlist_scope: { type: string, enum: [personal, global, protected] }
+        protected_faction_id: { type: [integer, "null"] }
+        protected_faction:
+          anyOf:
+            - { $ref: "#/components/schemas/ProtectedFactionSummary" }
+            - { type: "null" }
         personal_discord: { type: boolean }
         tenant_discord: { type: boolean }
         rules: { type: array, items: { $ref: "#/components/schemas/BgsRule" } }
@@ -975,6 +1119,7 @@ components:
             [
               id,
               version,
+              target_kind,
               archived,
               archived_at,
               packages,
@@ -984,6 +1129,7 @@ components:
           properties:
             id: { type: string }
             version: { type: integer, minimum: 1 }
+            target_kind: { type: string, enum: [watchlist, protected_faction] }
             archived: { type: boolean }
             archived_at: { type: [string, "null"], format: date-time }
             packages:
