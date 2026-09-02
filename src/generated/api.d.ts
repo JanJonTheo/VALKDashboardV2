@@ -608,6 +608,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    PersonalDiscordWebhookStatus: {
+      ok?: boolean;
+      configured: boolean;
+      /**
+       * Format: uri
+       * @description Decrypted personal webhook URL, visible only to its authenticated owner
+       */
+      webhook_url: string | null;
+      /** Format: date-time */
+      updated_at: string | null;
+      encryption_configured: boolean;
+    };
     /** @enum {string} */
     DashboardRole: "member" | "leadership" | "admin";
     DashboardUser: {
@@ -1496,12 +1508,14 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Masked webhook configuration status */
+      /** @description Personal webhook configuration and decrypted URL for the authenticated user */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["PersonalDiscordWebhookStatus"];
+        };
       };
       default: components["responses"]["ErrorResponse"];
     };
@@ -1527,7 +1541,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["PersonalDiscordWebhookStatus"];
+        };
       };
       default: components["responses"]["ErrorResponse"];
     };
@@ -1546,7 +1562,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["PersonalDiscordWebhookStatus"];
+        };
       };
       default: components["responses"]["ErrorResponse"];
     };

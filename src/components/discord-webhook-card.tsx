@@ -6,6 +6,7 @@ import { useState } from "react";
 
 interface WebhookStatus {
   configured: boolean;
+  webhook_url: string | null;
   updated_at: string | null;
   encryption_configured: boolean;
 }
@@ -41,12 +42,13 @@ async function request(method: "PUT" | "DELETE" | "POST", url?: string) {
 
 export function DiscordWebhookCard() {
   const queryClient = useQueryClient();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const query = useQuery({
     queryKey: ["personal-discord-webhook"],
     queryFn: loadStatus,
   });
+  const displayedUrl = url ?? query.data?.webhook_url ?? "";
   const mutation = useMutation({
     mutationFn: ({
       method,
@@ -55,8 +57,8 @@ export function DiscordWebhookCard() {
       method: "PUT" | "DELETE" | "POST";
       url?: string;
     }) => request(method, url),
+    onMutate: () => setNotice(""),
     onSuccess: async (_data, variables) => {
-      setUrl("");
       setNotice(
         variables.method === "POST"
           ? "Test message delivered."
@@ -67,6 +69,7 @@ export function DiscordWebhookCard() {
       await queryClient.invalidateQueries({
         queryKey: ["personal-discord-webhook"],
       });
+      if (variables.method !== "POST") setUrl(null);
     },
   });
   return (
@@ -82,7 +85,7 @@ export function DiscordWebhookCard() {
         <p className="webhook-status">
           <strong>Configured</strong>
           <span>
-            Secret is encrypted and never returned
+            URL is encrypted at rest
             {query.data.updated_at
               ? ` · updated ${new Date(query.data.updated_at).toLocaleString("en-GB")}`
               : ""}
@@ -100,15 +103,12 @@ export function DiscordWebhookCard() {
         </p>
       )}
       <label>
-        <span>
-          {query.data?.configured
-            ? "Replace webhook URL"
-            : "Discord webhook URL"}
-        </span>
+        <span>Discord webhook URL</span>
         <input
-          type="password"
+          type="url"
           autoComplete="off"
-          value={url}
+          spellCheck={false}
+          value={displayedUrl}
           placeholder="https://discord.com/api/webhooks/…"
           onChange={(event) => setUrl(event.target.value)}
         />
@@ -117,11 +117,11 @@ export function DiscordWebhookCard() {
         <button
           className="primary-button"
           disabled={
-            !url ||
+            !displayedUrl ||
             mutation.isPending ||
             query.data?.encryption_configured === false
           }
-          onClick={() => mutation.mutate({ method: "PUT", url })}
+          onClick={() => mutation.mutate({ method: "PUT", url: displayedUrl })}
         >
           Save webhook
         </button>

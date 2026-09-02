@@ -54,6 +54,12 @@
 .detailHeading span {
   color: var(--muted);
 }
+.header > .headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 .explorer button,
 .explorer select,
@@ -632,6 +638,11 @@
   .refreshButton,
   .pageSize {
     width: 100%;
+  }
+  .headerActions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .filterGrid,

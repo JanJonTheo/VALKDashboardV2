@@ -3,11 +3,25 @@ import { z } from "zod";
 import { flaskRequest } from "@/lib/flask";
 import {
   preferenceSchemaVersion,
+  viewCollectionSchema,
   viewPreferenceSchema,
 } from "@/lib/preferences";
 import { AccessError, requireDashboardSession } from "@/lib/session";
 
 const viewKeySchema = z.string().regex(/^[a-zA-Z0-9_.-]{1,96}$/);
+const maximumPreferenceBytes = 16 * 1024;
+
+function payloadTooLarge() {
+  return NextResponse.json(
+    {
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "Saved views exceed the 16 KB storage limit. Remove a saved view or reduce its filters.",
+      },
+    },
+    { status: 413 },
+  );
+}
 
 function errorResponse(error: unknown) {
   const status = error instanceof AccessError ? error.status : 502;
@@ -41,18 +55,13 @@ async function proxy(request: Request, params: Promise<{ viewKey: string }>) {
     let upstream = request;
     if (request.method === "PUT") {
       const raw = await request.text();
-      if (new TextEncoder().encode(raw).length > 16 * 1024)
-        return NextResponse.json(
-          {
-            error: {
-              code: "PAYLOAD_TOO_LARGE",
-              message: "Preference payload exceeds 16 KB",
-            },
-          },
-          { status: 413 },
-        );
+      if (new TextEncoder().encode(raw).length > maximumPreferenceBytes)
+        return payloadTooLarge();
       const body = JSON.parse(raw) as unknown;
-      const parsed = viewPreferenceSchema.safeParse(body);
+      const parsed =
+        typeof body === "object" && body !== null && "current" in body
+          ? viewCollectionSchema.safeParse(body)
+          : viewPreferenceSchema.safeParse(body);
       if (!parsed.success)
         return NextResponse.json(
           {
@@ -63,13 +72,17 @@ async function proxy(request: Request, params: Promise<{ viewKey: string }>) {
           },
           { status: 400 },
         );
+      const payload = JSON.stringify({
+        schema_version: preferenceSchemaVersion,
+        payload: parsed.data,
+      });
+      // Flask applies its limit to the complete envelope, not just the view.
+      if (new TextEncoder().encode(payload).length > maximumPreferenceBytes)
+        return payloadTooLarge();
       upstream = new Request(request.url, {
         method: "PUT",
         headers: request.headers,
-        body: JSON.stringify({
-          schema_version: preferenceSchemaVersion,
-          payload: parsed.data,
-        }),
+        body: payload,
       });
     }
     const response = await flaskRequest(

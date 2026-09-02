@@ -411,6 +411,14 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    const candidate = text(value);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
 function percentage(value: unknown): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 0;
@@ -423,6 +431,8 @@ export function humanizeBgsValue(value: unknown): string {
   return raw
     .replace(/^\$/, "")
     .replace(/;$/, "")
+    .replace(/^factionallegiance_/i, "")
+    .replace(/^allegiance_/i, "")
     .replace(/^government_/i, "")
     .replace(/^economy_/i, "")
     .replace(/^system_security_/i, "")
@@ -549,8 +559,45 @@ export function parseBgsStates(value: unknown): string[] {
 
 export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
   const envelope = row(value);
-  return rows(envelope.data).map((entry) => {
+  const entries = rows(envelope.data);
+  const factionMetadata = new Map<
+    string,
+    { allegiance: string; government: string }
+  >();
+
+  for (const entry of entries) {
+    for (const faction of rows(
+      entry.factions ?? entry.minor_factions ?? entry.minor_faction_presences,
+    )) {
+      const name = firstText(faction.name, faction.Name);
+      if (!name) continue;
+      const known = factionMetadata.get(name.toLocaleLowerCase("en"));
+      const allegiance = humanizeBgsValue(
+        firstText(faction.allegiance, faction.Allegiance),
+      );
+      const government = humanizeBgsValue(
+        firstText(
+          faction.government,
+          faction.Government_Localised,
+          faction.Government,
+        ),
+      );
+      factionMetadata.set(name.toLocaleLowerCase("en"), {
+        allegiance: known?.allegiance || allegiance,
+        government: known?.government || government,
+      });
+    }
+  }
+
+  return entries.map((entry) => {
     const info = row(entry.system_info);
+    const systemAllegiance = humanizeBgsValue(
+      firstText(info.allegiance, info.Allegiance),
+    );
+    const controllingFaction = firstText(
+      info.controlling_faction,
+      info.ControllingFaction,
+    );
     const historyByFaction = new Map<string, InfluenceHistoryPoint[]>();
     for (const snapshot of rows(entry.history)) {
       const timestamp = text(snapshot.ticktime ?? snapshot.timestamp);
@@ -567,9 +614,17 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
       }
     }
 
-    const factions = rows(entry.factions)
+    const factions = rows(
+      entry.factions ?? entry.minor_factions ?? entry.minor_faction_presences,
+    )
       .map((faction): WatchedFaction => {
-        const name = text(faction.name ?? faction.Name);
+        const name = firstText(faction.name, faction.Name);
+        const known = factionMetadata.get(name.toLocaleLowerCase("en"));
+        const isControllingFaction =
+          Boolean(controllingFaction) &&
+          name.localeCompare(controllingFaction, "en", {
+            sensitivity: "base",
+          }) === 0;
         const currentInfluence = percentage(
           faction.influence ?? faction.Influence,
         );
@@ -595,8 +650,22 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
         ];
         return {
           name,
-          government: humanizeBgsValue(faction.government),
-          allegiance: humanizeBgsValue(faction.allegiance),
+          government:
+            humanizeBgsValue(
+              firstText(
+                faction.government,
+                faction.Government_Localised,
+                faction.Government,
+              ),
+            ) ||
+            known?.government ||
+            "",
+          allegiance:
+            humanizeBgsValue(
+              firstText(faction.allegiance, faction.Allegiance),
+            ) ||
+            known?.allegiance ||
+            (isControllingFaction ? systemAllegiance : ""),
           activeStates: [...new Set(activeStates)],
           pendingStates: parseBgsStates(
             faction.pending_states ?? faction.pendingStates,
@@ -630,8 +699,8 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
       requestedSystem,
       available: entry.available !== false && Boolean(info.system_name),
       name: text(info.system_name ?? info.name ?? requestedSystem),
-      controllingFaction: text(info.controlling_faction),
-      allegiance: humanizeBgsValue(info.allegiance),
+      controllingFaction,
+      allegiance: systemAllegiance,
       government: humanizeBgsValue(info.government),
       population: Number(info.population) || 0,
       economy: humanizeBgsValue(

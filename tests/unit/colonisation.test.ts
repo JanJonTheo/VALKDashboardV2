@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   colonisationCommanderGroups,
   colonisationCommodityGroups,
+  colonisationTotals,
   filterColonisationContributionGroups,
   filterColonisationContributionRecords,
   filterColonisationConstructions,
   groupColonisationContributionRecords,
+  groupColonisationCommodities,
   includeUnattributedColonisationContributionGroups,
   includeUnattributedColonisationContributionRecords,
   normalizeColonisationContributionGroups,
@@ -47,6 +49,227 @@ const construction: ColonisationConstruction = {
     },
   ],
 };
+
+describe("Commodity/Construction grouping and Diff filtering", () => {
+  const finished: ColonisationConstruction = {
+    ...construction,
+    id: "43",
+    construction: "Cook Vision",
+    status: "finished",
+    delivered: 150,
+    diff: 0,
+    commodities: construction.commodities.map((commodity) => ({
+      ...commodity,
+      delivered: commodity.need,
+      diff: 0,
+      unrecorded: 0,
+      contributors: [{ cmdr: "JanJonTheo", delivered: commodity.need }],
+    })),
+  };
+  const snapshots = [construction, finished];
+
+  it("groups the same commodity across Constructions without counting Construction totals twice", () => {
+    const groups = groupColonisationCommodities(snapshots);
+    expect(
+      groups.map(({ commodity, need, delivered, diff }) => ({
+        commodity,
+        need,
+        delivered,
+        diff,
+      })),
+    ).toEqual([
+      { commodity: "Aluminium", need: 200, delivered: 170, diff: 30 },
+      { commodity: "Water", need: 100, delivered: 60, diff: 40 },
+    ]);
+    expect(
+      groups[0].constructions.map((entry) => entry.construction.id),
+    ).toEqual(["42", "43"]);
+    expect(colonisationTotals(groups)).toEqual({
+      need: 300,
+      delivered: 230,
+      diff: 70,
+    });
+    expect(colonisationTotals(groups)).toEqual(colonisationTotals(snapshots));
+    expect(groupColonisationCommodities([])).toEqual([]);
+    expect(colonisationTotals([])).toEqual({ need: 0, delivered: 0, diff: 0 });
+  });
+
+  it("uses per-Construction snapshot Diff with AND filters, preserving Construction totals", () => {
+    const filtered = filterColonisationConstructions(snapshots, "", {
+      commodityDiff: "yes",
+      commodity: ["Aluminium"],
+      cmdr: ["JanJonTheo", "Unattributed deliveries"],
+      status: "open",
+    });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]).toMatchObject({ need: 150, delivered: 80, diff: 70 });
+    expect(groupColonisationCommodities(filtered)).toMatchObject([
+      { commodity: "Aluminium", need: 100, delivered: 50, diff: 50 },
+    ]);
+    expect(
+      filterColonisationConstructions(snapshots, "", { commodityDiff: "no" }),
+    ).toEqual([finished]);
+    expect(
+      filterColonisationConstructions(snapshots, "", {
+        commodityDiff: "yes",
+        status: "finished",
+      }),
+    ).toEqual([]);
+    expect(snapshots[0].commodities[0].delivered).toBe(70);
+  });
+
+  it("checks Diff before scoping deliveries to a commander", () => {
+    const partial = {
+      ...finished,
+      commodities: [
+        {
+          ...finished.commodities[0],
+          unrecorded: 80,
+          contributors: [{ cmdr: "Valkyrie", delivered: 20 }],
+        },
+      ],
+    };
+    const filtered = filterColonisationConstructions([partial], "", {
+      commodityDiff: "no",
+      cmdr: ["Valkyrie"],
+    });
+    expect(filtered[0]).toMatchObject({
+      need: 150,
+      delivered: 150,
+      diff: 0,
+      commodities: [{ delivered: 20, diff: 80 }],
+    });
+    expect(
+      filterColonisationConstructions([partial], "", {
+        commodityDiff: "yes",
+        cmdr: ["Valkyrie"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("filters recorded and unattributed contributions using the same snapshot Diff", () => {
+    const records = includeUnattributedColonisationContributionRecords(
+      normalizeColonisationContributionRecords(
+        [
+          {
+            market_id: "42",
+            cmdr: "JanJonTheo",
+            commodity_key: "aluminium",
+            commodity: "Aluminium",
+            quantity: 40,
+          },
+          {
+            market_id: "43",
+            cmdr: "JanJonTheo",
+            commodity_key: "aluminium",
+            commodity: "Aluminium",
+            quantity: 100,
+          },
+          {
+            market_id: "43",
+            cmdr: "JanJonTheo",
+            commodity_key: "water",
+            commodity: "Water",
+            quantity: 50,
+          },
+        ],
+        snapshots,
+      ),
+      snapshots,
+    );
+    const outstanding = filterColonisationContributionRecords(
+      records,
+      "",
+      { commodityDiff: "yes" },
+      snapshots,
+    );
+    expect(outstanding.map((record) => record.cmdr)).toEqual([
+      "JanJonTheo",
+      "Unattributed deliveries",
+    ]);
+    expect(outstanding.every((record) => record.constructionId === "42")).toBe(
+      true,
+    );
+    expect(
+      colonisationTotals(
+        filterColonisationContributionRecords(
+          records,
+          "",
+          { commodityDiff: "no" },
+          snapshots,
+        ),
+      ).delivered,
+    ).toBe(150);
+    expect(
+      filterColonisationContributionRecords(records, "", {
+        commodityDiff: "no",
+      }),
+    ).toEqual([]);
+
+    const groups = includeUnattributedColonisationContributionGroups(
+      normalizeColonisationContributionGroups(
+        [
+          {
+            cmdr: "JanJonTheo",
+            subgroups: [
+              {
+                key: "42",
+                quantity: 40,
+                commodities: [
+                  {
+                    commodity_key: "aluminium",
+                    commodity: "Aluminium",
+                    quantity: 40,
+                  },
+                ],
+              },
+              {
+                key: "43",
+                quantity: 150,
+                commodities: [
+                  {
+                    commodity_key: "aluminium",
+                    commodity: "Aluminium",
+                    quantity: 100,
+                  },
+                  { commodity_key: "water", commodity: "Water", quantity: 50 },
+                ],
+              },
+            ],
+          },
+        ],
+        snapshots,
+      ),
+      snapshots,
+    );
+    const completed = filterColonisationContributionGroups(
+      groups,
+      "",
+      { commodityDiff: "no", commodity: ["Water"] },
+      snapshots,
+    );
+    expect(completed).toHaveLength(1);
+    expect(completed[0]).toMatchObject({
+      delivered: 50,
+      constructions: [
+        { id: "43", delivered: 50, commodities: [{ commodity: "Water" }] },
+      ],
+    });
+    expect(
+      colonisationTotals(
+        filterColonisationContributionGroups(
+          groups,
+          "",
+          { commodityDiff: "yes" },
+          snapshots,
+        ),
+      ).delivered,
+    ).toBe(50);
+    expect(
+      filterColonisationContributionGroups(groups, "", { commodityDiff: "no" }),
+    ).toEqual([]);
+  });
+});
 
 describe("Colonisation construction presentation", () => {
   it("creates Cmdr groups with unique commodity need and group sums", () => {

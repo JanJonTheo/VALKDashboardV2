@@ -7,6 +7,7 @@ import {
   Plus,
   Power,
   PowerOff,
+  RefreshCw,
   Send,
   ShieldCheck,
   Trash2,
@@ -16,10 +17,15 @@ import {
 import {
   useDeferredValue,
   useId,
+  useMemo,
   useState,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { PageViewRegistration } from "@/components/page-view-context";
+import { SavedViewsControl } from "@/components/saved-views-control";
+import { viewFilterString, type ViewPreference } from "@/lib/preferences";
+import { useStoredViewPreference } from "@/lib/use-view-preference";
 
 export interface ManagedProtectedFaction {
   id: number;
@@ -96,6 +102,20 @@ function operationNotice(kind: MutationOperation["kind"]): string {
 
 export function ProtectedFactionAdministration() {
   const queryClient = useQueryClient();
+  const defaults = useMemo<ViewPreference>(
+    () => ({
+      search: "",
+      filters: { status: "all" },
+      sorting: [],
+      visibleColumns: [],
+      pageSize: 25,
+    }),
+    [],
+  );
+  const savedView = useStoredViewPreference(
+    "admin-protected-factions-view-state",
+    defaults,
+  );
   const factions = useQuery<FactionEnvelope>({
     queryKey: ["admin-protected-factions"],
     queryFn: () => api("/api/admin/protected-factions"),
@@ -104,8 +124,16 @@ export function ProtectedFactionAdministration() {
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(
     null,
   );
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const search = savedView.view.search ?? "";
+  const status = (viewFilterString(savedView.view.filters.status) || "all") as
+    "all" | "active" | "inactive";
+  const setSearch = (value: string) =>
+    savedView.setView((current) => ({ ...current, search: value }));
+  const setStatus = (value: "all" | "active" | "inactive") =>
+    savedView.setView((current) => ({
+      ...current,
+      filters: { ...current.filters, status: value },
+    }));
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const mutation = useMutation({
@@ -161,6 +189,12 @@ export function ProtectedFactionAdministration() {
 
   return (
     <>
+      <PageViewRegistration
+        controller={{
+          reset: savedView.reset,
+          refresh: () => factions.refetch(),
+        }}
+      />
       <header className="page-header">
         <div>
           <p className="eyebrow">ADMINISTRATION / BGS PROTECTION</p>
@@ -171,6 +205,18 @@ export function ProtectedFactionAdministration() {
           </p>
         </div>
         <div>
+          <SavedViewsControl model={savedView} />
+          <button
+            className="secondary-button"
+            onClick={() => void factions.refetch()}
+            disabled={factions.isFetching}
+          >
+            <RefreshCw
+              className={factions.isFetching ? "spin" : ""}
+              size={15}
+            />
+            Refresh
+          </button>
           <button
             className="primary-button"
             onClick={() => setEditor({ mode: "create", faction: null })}

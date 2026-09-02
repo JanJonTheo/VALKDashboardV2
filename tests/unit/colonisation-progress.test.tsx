@@ -9,11 +9,13 @@ import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ColonisationCommodityGroupedTable,
+  ColonisationCommodityConstructionsTable,
   ColonisationContributionsTable,
   ColonisationContributionRecordsTable,
   ColonisationGroupedTable,
   colonisationCommanderGroupKey,
   colonisationCommodityGroupKey,
+  colonisationCommodityConstructionGroupKey,
   colonisationContributionCommanderGroupKey,
   colonisationContributionConstructionGroupKey,
   type ColonisationSort,
@@ -21,6 +23,7 @@ import {
 } from "@/components/colonisation-progress";
 import {
   groupColonisationContributionRecords,
+  groupColonisationCommodities,
   includeUnattributedColonisationContributionRecords,
   normalizeColonisationContributionRecords,
   type ColonisationConstruction,
@@ -77,6 +80,189 @@ const contributionGroup: ColonisationContributionGroup = {
     },
   ],
 };
+
+describe("Colonisation table totals and Commodity/Construction view", () => {
+  const shared = {
+    sort: { key: "construction", direction: "asc" } as ColonisationSort,
+    onSort: () => undefined,
+    collapsedCommanderIds: new Set<string>(),
+    collapsedConstructionIds: new Set<string>(),
+    collapsedCommodityIds: new Set<string>(),
+    onToggleCommander: () => undefined,
+    onToggleConstruction: () => undefined,
+    onToggleCommodity: () => undefined,
+  };
+  const recordGroups = groupColonisationContributionRecords(
+    normalizeColonisationContributionRecords(
+      [
+        {
+          market_id: "42",
+          commodity: "Aluminium",
+          quantity: 40,
+          cmdr: "JanJonTheo",
+        },
+      ],
+      [construction],
+    ),
+  );
+
+  it.each([
+    [
+      "Contributions",
+      <ColonisationContributionsTable
+        {...shared}
+        key="contributions"
+        groups={[contributionGroup]}
+      />,
+      ["40"],
+    ],
+    [
+      "Construction/Cmdrs",
+      <ColonisationGroupedTable
+        key="commanders"
+        {...shared}
+        constructions={[construction]}
+      />,
+      ["100", "40", "60"],
+    ],
+    [
+      "Construction/Commodities",
+      <ColonisationCommodityGroupedTable
+        {...shared}
+        key="commodities"
+        constructions={[construction]}
+      />,
+      ["100", "40", "60"],
+    ],
+    [
+      "Construction/Contribution",
+      <ColonisationContributionRecordsTable
+        {...shared}
+        key="records"
+        groups={recordGroups}
+      />,
+      ["40"],
+    ],
+    [
+      "Commodities/Constructions",
+      <ColonisationCommodityConstructionsTable
+        {...shared}
+        key="commodity-constructions"
+        groups={groupColonisationCommodities([construction])}
+      />,
+      ["100", "40", "60"],
+    ],
+  ] as const)(
+    "adds a top-level total without double counting in %s",
+    (_label, component, values) => {
+      const { container } = render(component);
+      const table = screen.getByRole("table");
+      const summary = table.querySelector("tbody")!;
+      expect(summary).toHaveClass("colonisation-totals");
+      expect(summary).toHaveTextContent("Total · 1 group");
+      expect(
+        within(summary)
+          .getAllByRole("cell")
+          .map((cell) => cell.textContent),
+      ).toEqual(values);
+      const mobileSummary = container.querySelector(
+        ".colonisation-mobile-groups > .colonisation-totals",
+      );
+      expect(mobileSummary).toHaveTextContent("Total · 1 group");
+      expect(
+        Array.from(
+          mobileSummary!.querySelectorAll("dd"),
+          (cell) => cell.textContent,
+        ),
+      ).toEqual(values);
+    },
+  );
+
+  it("shows collapsible Commodity totals with sortable Construction subgroups, icons and inline copy buttons", () => {
+    const groups = groupColonisationCommodities([
+      construction,
+      {
+        ...construction,
+        id: "43",
+        construction: "Cook Vision",
+        status: "finished",
+        diff: 0,
+        delivered: 100,
+        commodities: [
+          { ...construction.commodities[0], delivered: 100, diff: 0 },
+        ],
+      },
+    ]);
+    function Harness() {
+      const [sort, setSort] = useState<ColonisationSort>({
+        key: "commodity",
+        direction: "asc",
+      });
+      const [collapsed, setCollapsed] = useState(
+        new Set([colonisationCommodityConstructionGroupKey("aluminium")]),
+      );
+      return (
+        <ColonisationCommodityConstructionsTable
+          groups={groups}
+          sort={sort}
+          onSort={(key) => setSort((current) => nextSort(current, key))}
+          collapsedCommodityIds={collapsed}
+          onToggleCommodity={(key) =>
+            setCollapsed((current) =>
+              current.size
+                ? new Set()
+                : new Set([colonisationCommodityConstructionGroupKey(key)]),
+            )
+          }
+        />
+      );
+    }
+    render(<Harness />);
+    const table = screen.getByRole("table");
+    const summary = table.querySelector("tbody")!;
+    expect(
+      within(summary)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["200", "140", "60"]);
+    expect(within(table).queryByText("Ivaldi Foundry")).not.toBeInTheDocument();
+    fireEvent.click(
+      within(table).getByRole("button", { name: "Expand commodity Aluminium" }),
+    );
+    expect(within(table).getByText("Ivaldi Foundry")).toBeInTheDocument();
+    const names = () =>
+      Array.from(
+        table.querySelectorAll(".commodity-construction-row"),
+        (row) =>
+          row.querySelector(".colonisation-copyable-value > span")?.textContent,
+      );
+    expect(names()).toEqual(["Cook Vision", "Ivaldi Foundry"]);
+    fireEvent.click(within(table).getByRole("button", { name: "Delivered" }));
+    expect(names()).toEqual(["Ivaldi Foundry", "Cook Vision"]);
+    fireEvent.click(within(table).getByRole("button", { name: "Delivered" }));
+    expect(names()).toEqual(["Cook Vision", "Ivaldi Foundry"]);
+    expect(
+      within(table).getByLabelText("Construction completed"),
+    ).toBeVisible();
+    const copy = within(table).getByRole("button", {
+      name: "Copy construction name: Cook Vision",
+    });
+    expect(copy.parentElement).toHaveClass("colonisation-copyable-value");
+    expect(copy.parentElement).toHaveTextContent("Cook Vision");
+    expect(table.querySelector(".commodity-name i")).toBeNull();
+    expect(table.querySelector(".commodity-name svg")).not.toBeNull();
+    fireEvent.click(
+      within(table).getByRole("button", {
+        name: "Collapse commodity Aluminium",
+      }),
+    );
+    expect(
+      within(summary)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["200", "140", "60"]);
+  });
+});
 
 function nextSort(current: ColonisationSort, key: ColonisationSortKey) {
   return {

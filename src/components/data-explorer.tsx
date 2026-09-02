@@ -1,7 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
@@ -38,6 +38,10 @@ import {
   type EventFilterState,
 } from "@/lib/data-explorer";
 import styles from "./data-explorer.module.css";
+import { PageViewRegistration } from "./page-view-context";
+import { SavedViewsControl } from "./saved-views-control";
+import { viewFilterString, type ViewPreference } from "@/lib/preferences";
+import { useStoredViewPreference } from "@/lib/use-view-preference";
 
 interface ExplorerPayload {
   data: DataExplorerRow[];
@@ -194,21 +198,69 @@ function JsonNode({
 }
 
 export function DataExplorer() {
-  const [table, setTable] = useState<DataExplorerTable>("event");
-  const [eventFilters, setEventFilters] =
-    useState<EventFilterState>(initialEventFilters);
-  const [search, setSearch] = useState("");
+  const queryClient = useQueryClient();
+  const defaults = useMemo<ViewPreference>(
+    () => ({
+      search: "",
+      filters: {
+        cmdr: "",
+        event: "",
+        tickid: "",
+        colonisationOnly: "false",
+        dateFilter: "false",
+        fromDate: initialEventFilters.fromDate,
+        toDate: initialEventFilters.toDate,
+      },
+      variant: "event",
+      sorting: [{ id: "timestamp", desc: true }],
+      visibleColumns: [],
+      pageSize: 50,
+    }),
+    [],
+  );
+  const savedView = useStoredViewPreference("data-explorer", defaults);
+  const table = DATA_EXPLORER_TABLES.includes(
+    savedView.view.variant as DataExplorerTable,
+  )
+    ? (savedView.view.variant as DataExplorerTable)
+    : "event";
+  const eventFilters = useMemo<EventFilterState>(
+    () => ({
+      cmdr: viewFilterString(savedView.view.filters.cmdr),
+      event: viewFilterString(savedView.view.filters.event),
+      tickid: viewFilterString(savedView.view.filters.tickid),
+      colonisationOnly:
+        viewFilterString(savedView.view.filters.colonisationOnly) === "true",
+      dateFilter:
+        viewFilterString(savedView.view.filters.dateFilter) === "true",
+      fromDate:
+        viewFilterString(savedView.view.filters.fromDate) ||
+        initialEventFilters.fromDate,
+      toDate:
+        viewFilterString(savedView.view.filters.toDate) ||
+        initialEventFilters.toDate,
+    }),
+    [savedView.view.filters],
+  );
+  const search = savedView.view.search ?? "";
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
-  const [sortColumn, setSortColumn] = useState("timestamp");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const pageSize = savedView.view.pageSize;
+  const sortColumn =
+    savedView.view.sorting[0]?.id ?? (table === "event" ? "timestamp" : "id");
+  const sortDirection: SortDirection = savedView.view.sorting[0]?.desc
+    ? "desc"
+    : "asc";
   const [selectedRows, setSelectedRows] = useState<
     Map<string, DataExplorerRow>
   >(() => new Map());
   const [detailRow, setDetailRow] = useState<DataExplorerRow | null>(null);
   const [status, setStatus] = useState("");
   const [allAction, setAllAction] = useState<AllAction>(null);
+  const setSearch = (value: string) =>
+    savedView.setView((current) => ({ ...current, search: value }));
+  const setPageSize = (value: number) =>
+    savedView.setView((current) => ({ ...current, pageSize: value }));
 
   useEffect(() => {
     const timeout = window.setTimeout(
@@ -324,17 +376,25 @@ export function DataExplorer() {
     pageRowIds.length > 0 && pageRowIds.every((id) => selectedRows.has(id));
 
   const updateFilters = (change: Partial<EventFilterState>) => {
-    setEventFilters((current) => ({ ...current, ...change }));
+    const next = { ...eventFilters, ...change };
+    savedView.setView((current) => ({
+      ...current,
+      filters: Object.fromEntries(
+        Object.entries(next).map(([key, value]) => [key, String(value)]),
+      ),
+    }));
     setPage(1);
     setSelectedRows(new Map());
   };
 
   const changeTable = (nextTable: DataExplorerTable) => {
-    setTable(nextTable);
+    savedView.setView((current) => ({
+      ...current,
+      search: "",
+      variant: nextTable,
+      sorting: [{ id: nextTable === "event" ? "timestamp" : "id", desc: true }],
+    }));
     setPage(1);
-    setSortColumn(nextTable === "event" ? "timestamp" : "id");
-    setSortDirection("desc");
-    setSearch("");
     setDebouncedSearch("");
     setSelectedRows(new Map());
     setDetailRow(null);
@@ -343,12 +403,15 @@ export function DataExplorer() {
 
   const changeSort = (column: string) => {
     setPage(1);
-    if (sortColumn === column)
-      setSortDirection((direction) => (direction === "asc" ? "desc" : "asc"));
-    else {
-      setSortColumn(column);
-      setSortDirection("asc");
-    }
+    savedView.setView((current) => ({
+      ...current,
+      sorting: [
+        {
+          id: column,
+          desc: sortColumn === column ? sortDirection === "asc" : false,
+        },
+      ],
+    }));
   };
 
   const toggleRow = (row: DataExplorerRow) => {
@@ -428,6 +491,19 @@ export function DataExplorer() {
 
   return (
     <div className={styles.explorer}>
+      <PageViewRegistration
+        controller={{
+          reset: () => {
+            savedView.reset();
+            setPage(1);
+            setSelectedRows(new Map());
+            setDetailRow(null);
+            setStatus("");
+          },
+          refresh: () =>
+            queryClient.invalidateQueries({ queryKey: ["data-explorer"] }),
+        }}
+      />
       <header className={styles.header}>
         <div>
           <p>ADMIN / RAW DATA</p>
@@ -436,19 +512,28 @@ export function DataExplorer() {
           </h1>
           <span>Inspect, filter, copy and export tenant database records.</span>
         </div>
-        <button
-          type="button"
-          className={styles.refreshButton}
-          onClick={() => {
-            void query.refetch();
-            if (debouncedSearch) void allQuery.refetch();
-            if (table === "event") void optionsQuery.refetch();
-          }}
-          disabled={loading}
-        >
-          <RefreshCw className={loading ? styles.spin : ""} size={16} />
-          Refresh
-        </button>
+        <div className={styles.headerActions}>
+          <SavedViewsControl
+            model={savedView}
+            onViewApplied={() => {
+              setPage(1);
+              setSelectedRows(new Map());
+            }}
+          />
+          <button
+            type="button"
+            className={styles.refreshButton}
+            onClick={() => {
+              void query.refetch();
+              if (debouncedSearch) void allQuery.refetch();
+              if (table === "event") void optionsQuery.refetch();
+            }}
+            disabled={loading}
+          >
+            <RefreshCw className={loading ? styles.spin : ""} size={16} />
+            Refresh
+          </button>
+        </div>
       </header>
 
       <section className={styles.controls} aria-label="Data explorer controls">

@@ -102,6 +102,56 @@ describe("system watchlist", () => {
     ]);
   });
 
+  it("keeps allegiance metadata across upstream field variants and gaps", () => {
+    const result = normalizeWatchedSystems({
+      data: [
+        {
+          requested_system: "Alpha",
+          available: true,
+          system_info: {
+            system_name: "Alpha",
+            controlling_faction: "Shared Faction",
+            allegiance: "Empire",
+          },
+          factions: [
+            {
+              Name: "Shared Faction",
+              Allegiance: "$factionallegiance_Empire;",
+              Government: "$government_Corporate;",
+              Influence: 0.51,
+            },
+          ],
+        },
+        {
+          requested_system: "Beta",
+          available: true,
+          system_info: { system_name: "Beta" },
+          factions: [{ name: "Shared Faction", influence: 0.2 }],
+        },
+        {
+          requested_system: "Gamma",
+          available: true,
+          system_info: {
+            system_name: "Gamma",
+            controlling_faction: "Local Controller",
+            allegiance: "Federation",
+          },
+          factions: [{ name: "Local Controller", influence: 0.4 }],
+        },
+      ],
+    });
+
+    expect(result[0].factions[0]).toMatchObject({
+      allegiance: "Empire",
+      government: "Corporate",
+    });
+    expect(result[1].factions[0]).toMatchObject({
+      allegiance: "Empire",
+      government: "Corporate",
+    });
+    expect(result[2].factions[0].allegiance).toBe("Federation");
+  });
+
   it("prioritizes favorites and recognizes the tenant faction", () => {
     const systems = systemWatchlistSchema.parse({
       systems: [

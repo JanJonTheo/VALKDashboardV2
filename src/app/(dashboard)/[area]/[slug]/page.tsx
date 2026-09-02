@@ -26,5 +26,5 @@ export default async function FeaturePage({
   if (area === "intelligence" && slug === "alerts") return <BgsAlerts />;
   const spec = findFeature(area, slug);
   if (!spec) notFound();
-  return <FeatureDashboard spec={spec} session={session} />;
+  return <FeatureDashboard key={spec.key} spec={spec} session={session} />;
 }

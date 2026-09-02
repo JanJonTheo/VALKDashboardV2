@@ -8,8 +8,12 @@ import {
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo } from "react";
 import { loadBgsAlerts, type BgsAlertFilters } from "@/lib/bgs-alerts-client";
+import { viewFilterString, type ViewPreference } from "@/lib/preferences";
+import { useStoredViewPreference } from "@/lib/use-view-preference";
+import { PageViewRegistration } from "@/components/page-view-context";
+import { SavedViewsControl } from "@/components/saved-views-control";
 
 async function updateAlert(
   id: string,
@@ -29,12 +33,27 @@ async function updateAlert(
 
 export function BgsAlerts() {
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<BgsAlertFilters>({
-    status: "all",
-    scope: "all",
-    severity: "all",
-    system: "",
-  });
+  const defaults = useMemo<ViewPreference>(
+    () => ({
+      filters: { status: "all", scope: "all", severity: "all", system: "" },
+      sorting: [],
+      visibleColumns: [],
+      pageSize: 25,
+    }),
+    [],
+  );
+  const savedView = useStoredViewPreference("bgs-alerts-view-state", defaults);
+  const filters: BgsAlertFilters = {
+    status: (viewFilterString(savedView.view.filters.status) ||
+      "all") as BgsAlertFilters["status"],
+    scope: (viewFilterString(savedView.view.filters.scope) ||
+      "all") as BgsAlertFilters["scope"],
+    severity: (viewFilterString(savedView.view.filters.severity) ||
+      "all") as BgsAlertFilters["severity"],
+    system: viewFilterString(savedView.view.filters.system),
+  };
+  const setFilters = (next: BgsAlertFilters) =>
+    savedView.setView((current) => ({ ...current, filters: { ...next } }));
   const query = useQuery({
     queryKey: ["bgs-alerts", filters],
     queryFn: () => loadBgsAlerts(filters),
@@ -58,8 +77,16 @@ export function BgsAlerts() {
   ].sort();
   return (
     <>
+      <PageViewRegistration
+        controller={{
+          reset: savedView.reset,
+          refresh: () =>
+            queryClient.invalidateQueries({ queryKey: ["bgs-alerts"] }),
+        }}
+      />
       <header className="page-header">
         <div>
+          <SavedViewsControl model={savedView} />
           <p className="eyebrow">INTELLIGENCE / BGS ALERTS</p>
           <h1>Alert centre</h1>
           <p>

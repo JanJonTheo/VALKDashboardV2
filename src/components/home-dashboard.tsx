@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { HomeActivityChart } from "@/components/home-activity-chart";
 import { HomeBgsAlerts } from "@/components/home-bgs-alerts";
+import { PageViewRegistration } from "@/components/page-view-context";
 import type { DashboardSession } from "@/lib/access";
 import {
   formatTickCountdown,
@@ -166,6 +167,9 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
 
   return (
     <>
+      <PageViewRegistration
+        controller={{ reset: () => {}, refresh: refreshAll }}
+      />
       <header className="page-header home-header">
         <div>
           <p className="eyebrow">HOME / COMMAND CENTER</p>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const preferenceSchemaVersion = 2;
+export const preferenceSchemaVersion = 3;
+export const maximumSavedViews = 20;
 
 export const leaderboardMetricOptions = [
   { value: "missions", label: "Missions Completed" },
@@ -31,6 +32,7 @@ const viewFilterValueSchema = z.union([
 ]);
 
 export const viewPreferenceSchema = z.object({
+  search: z.string().max(512).optional(),
   period: z.string().max(32).optional(),
   metric: z
     .enum(leaderboardMetricOptions.map((option) => option.value))
@@ -42,7 +44,48 @@ export const viewPreferenceSchema = z.object({
   pageSize: z.number().int().min(10).max(250).default(25),
 });
 
+export const savedViewSchema = z.object({
+  id: z.string().min(1).max(96),
+  name: z.string().trim().min(1).max(64),
+  view: viewPreferenceSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const viewCollectionSchema = z
+  .object({
+    current: viewPreferenceSchema,
+    activeViewId: z.string().min(1).max(96).nullable().default(null),
+    views: z.array(savedViewSchema).max(maximumSavedViews).default([]),
+  })
+  .superRefine((collection, context) => {
+    const names = new Set<string>();
+    for (const view of collection.views) {
+      const normalized = view.name.toLocaleLowerCase("en");
+      if (names.has(normalized)) {
+        context.addIssue({
+          code: "custom",
+          message: "Saved view names must be unique",
+          path: ["views"],
+        });
+      }
+      names.add(normalized);
+    }
+    if (
+      collection.activeViewId &&
+      !collection.views.some((view) => view.id === collection.activeViewId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The active saved view does not exist",
+        path: ["activeViewId"],
+      });
+    }
+  });
+
 export type ViewPreference = z.infer<typeof viewPreferenceSchema>;
+export type SavedView = z.infer<typeof savedViewSchema>;
+export type ViewCollection = z.infer<typeof viewCollectionSchema>;
 export type ViewFilterValue = ViewPreference["filters"][string];
 
 export function viewFilterValues(value: ViewFilterValue | undefined) {
@@ -81,4 +124,29 @@ export function defaultViewPreference(
 export function preferencePayload(value: unknown): ViewPreference | null {
   const parsed = viewPreferenceSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+export function defaultViewCollection(current: ViewPreference): ViewCollection {
+  return { current, activeViewId: null, views: [] };
+}
+
+export function viewCollectionPayload(
+  value: unknown,
+  fallback: ViewPreference,
+): ViewCollection {
+  const collection = viewCollectionSchema.safeParse(value);
+  if (collection.success) return collection.data;
+  if (typeof value === "object" && value !== null && "current" in value) {
+    const current = preferencePayload((value as { current?: unknown }).current);
+    return defaultViewCollection(current ?? fallback);
+  }
+  const legacy = preferencePayload(value);
+  return defaultViewCollection(legacy ?? fallback);
+}
+
+export function viewPreferencesEqual(
+  left: ViewPreference,
+  right: ViewPreference,
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

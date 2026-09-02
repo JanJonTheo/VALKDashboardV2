@@ -523,6 +523,16 @@ export const features: FeatureSpec[] = [
           { value: "25", label: "Top 25" },
         ],
       },
+      {
+        key: "commodity_diff",
+        label: "Commodity Diff",
+        type: "select",
+        options: [
+          { value: "", label: "Alle" },
+          { value: "yes", label: "Ja (Diff > 0)" },
+          { value: "no", label: "Nein (Diff = 0)" },
+        ],
+      },
     ],
     columns: [
       { key: "construction", label: "Construction", priority: true },

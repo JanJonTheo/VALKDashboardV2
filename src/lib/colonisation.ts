@@ -112,6 +112,7 @@ export interface ColonisationFilterValues {
   status?: string;
   system?: string;
   commodity?: string[];
+  commodityDiff?: string;
   fromDate?: string;
   toDate?: string;
 }
@@ -465,6 +466,36 @@ function matchesConstructionStatus(value: string, filter: string | undefined) {
   return !filter || colonisationConstructionStatus(value) === filter;
 }
 
+function hasCommodityDiffFilter(filter: string | undefined) {
+  return filter === "yes" || filter === "no";
+}
+
+function matchesCommodityDiff(
+  diff: number | undefined,
+  filter: string | undefined,
+) {
+  if (!hasCommodityDiffFilter(filter)) return true;
+  if (diff === undefined) return false;
+  return filter === "yes" ? diff > 0 : diff === 0;
+}
+
+// Always use the Construction snapshot, not a commander's partial deliveries.
+function commodityDiffLookup(constructions: ColonisationConstruction[]) {
+  const diffs = new Map<string, number>();
+  for (const construction of constructions) {
+    for (const commodity of construction.commodities) {
+      for (const key of [commodity.key, commodity.commodity])
+        diffs.set(
+          contributionRecordCommodityIdentity(construction.id, key),
+          commodity.diff,
+        );
+    }
+  }
+  return (constructionId: string, key: string, name: string) =>
+    diffs.get(contributionRecordCommodityIdentity(constructionId, key)) ??
+    diffs.get(contributionRecordCommodityIdentity(constructionId, name));
+}
+
 function recordMatchesDate(
   timestamp: string,
   fromDate?: string,
@@ -480,14 +511,24 @@ export function filterColonisationContributionRecords(
   records: ColonisationContributionRecord[],
   query: string,
   filters: ColonisationFilterValues = {},
+  constructions: ColonisationConstruction[] = [],
 ) {
   const needle = query.trim().toLowerCase();
+  const commodityDiff = commodityDiffLookup(constructions);
   return records.filter(
     (record) =>
       matchesAny(record.cmdr, filters.cmdr) &&
       matchesConstructionStatus(record.status, filters.status) &&
       exactMatch(record.system, filters.system) &&
       matchesAny(record.commodity, filters.commodity) &&
+      matchesCommodityDiff(
+        commodityDiff(
+          record.constructionId,
+          record.commodityKey,
+          record.commodity,
+        ),
+        filters.commodityDiff,
+      ) &&
       recordMatchesDate(record.timestamp, filters.fromDate, filters.toDate) &&
       (!needle ||
         [
@@ -647,8 +688,10 @@ export function filterColonisationContributionGroups(
   groups: ColonisationContributionGroup[],
   query: string,
   filters: ColonisationFilterValues = {},
+  snapshots: ColonisationConstruction[] = [],
 ) {
   const needle = query.trim().toLowerCase();
+  const commodityDiff = commodityDiffLookup(snapshots);
   return groups
     .filter((group) => matchesAny(group.cmdr, filters.cmdr))
     .map((group) => {
@@ -658,15 +701,33 @@ export function filterColonisationContributionGroups(
             matchesConstructionStatus(construction.status, filters.status) &&
             exactMatch(construction.system, filters.system),
         )
-        .map((construction) => ({
-          ...construction,
-          commodities: construction.commodities.filter((commodity) =>
-            matchesAny(commodity.commodity, filters.commodity),
-          ),
-        }))
+        .map((construction) => {
+          const commodities = construction.commodities.filter(
+            (commodity) =>
+              matchesAny(commodity.commodity, filters.commodity) &&
+              matchesCommodityDiff(
+                commodityDiff(
+                  construction.id,
+                  commodity.key,
+                  commodity.commodity,
+                ),
+                filters.commodityDiff,
+              ),
+          );
+          return {
+            ...construction,
+            commodities,
+            delivered: commodities.reduce(
+              (total, commodity) => total + commodity.delivered,
+              0,
+            ),
+          };
+        })
         .filter(
           (construction) =>
-            !filters.commodity?.length || construction.commodities.length > 0,
+            (!filters.commodity?.length &&
+              !hasCommodityDiffFilter(filters.commodityDiff)) ||
+            construction.commodities.length > 0,
         );
       const commodityMap = new Map<string, ColonisationContributionCommodity>();
       for (const construction of constructions) {
@@ -744,8 +805,10 @@ export function filterColonisationConstructions(
     )
     .map((construction) => {
       const commodities = construction.commodities
-        .filter((commodity) =>
-          matchesAny(commodity.commodity, filters.commodity),
+        .filter(
+          (commodity) =>
+            matchesAny(commodity.commodity, filters.commodity) &&
+            matchesCommodityDiff(commodity.diff, filters.commodityDiff),
         )
         .map((commodity) => {
           if (!filters.cmdr?.length) return commodity;
@@ -777,7 +840,11 @@ export function filterColonisationConstructions(
             commodity.contributors.length > 0 ||
             commodity.unrecorded > 0,
         );
-      const scoped = Boolean(filters.cmdr?.length || filters.commodity?.length);
+      const scoped = Boolean(
+        filters.cmdr?.length ||
+        filters.commodity?.length ||
+        hasCommodityDiffFilter(filters.commodityDiff),
+      );
       if (!scoped) return construction;
       return {
         ...construction,
@@ -786,7 +853,9 @@ export function filterColonisationConstructions(
     })
     .filter(
       (construction) =>
-        (!filters.cmdr?.length && !filters.commodity?.length) ||
+        (!filters.cmdr?.length &&
+          !filters.commodity?.length &&
+          !hasCommodityDiffFilter(filters.commodityDiff)) ||
         construction.commodities.length > 0,
     )
     .filter(
@@ -935,4 +1004,56 @@ export function colonisationCommodityNames(
       ),
     ),
   ].sort((left, right) => left.localeCompare(right));
+}
+
+export interface ColonisationCommodityConstructionGroup {
+  key: string;
+  commodity: string;
+  need: number;
+  delivered: number;
+  diff: number;
+  constructions: {
+    construction: ColonisationConstruction;
+    commodity: ColonisationCommodity;
+  }[];
+}
+
+export function groupColonisationCommodities(
+  constructions: ColonisationConstruction[],
+): ColonisationCommodityConstructionGroup[] {
+  const groups = new Map<string, ColonisationCommodityConstructionGroup>();
+  for (const construction of constructions) {
+    for (const commodity of construction.commodities) {
+      const key = commodity.key.trim().toLowerCase();
+      const group = groups.get(key) ?? {
+        key,
+        commodity: commodity.commodity,
+        need: 0,
+        delivered: 0,
+        diff: 0,
+        constructions: [],
+      };
+      group.need += commodity.need;
+      group.delivered += commodity.delivered;
+      group.diff += commodity.diff;
+      group.constructions.push({ construction, commodity });
+      groups.set(key, group);
+    }
+  }
+  return [...groups.values()].sort((left, right) =>
+    left.commodity.localeCompare(right.commodity),
+  );
+}
+
+export function colonisationTotals(
+  groups: { need?: number; delivered: number; diff?: number }[],
+) {
+  return groups.reduce<{ need: number; delivered: number; diff: number }>(
+    (total, group) => ({
+      need: total.need + (group.need ?? 0),
+      delivered: total.delivered + group.delivered,
+      diff: total.diff + (group.diff ?? 0),
+    }),
+    { need: 0, delivered: 0, diff: 0 },
+  );
 }

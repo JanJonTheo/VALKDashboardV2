@@ -3,6 +3,8 @@ import {
   defaultViewPreference,
   leaderboardMetricOptions,
   preferencePayload,
+  viewCollectionPayload,
+  viewCollectionSchema,
 } from "@/lib/preferences";
 
 describe("dashboard view preferences", () => {
@@ -59,5 +61,63 @@ describe("dashboard view preferences", () => {
       "JanJonTheo",
       "Unattributed deliveries",
     ]);
+  });
+
+  it("persists the fifth Colonisation tab, its sorting and Commodity Diff", () => {
+    const current = preferencePayload({
+      variant: "commodity-constructions",
+      filters: { commodity_diff: "yes", commodity: ["Aluminium", "Water"] },
+      sorting: [
+        { id: "colonisation:commodity-constructions:diff", desc: true },
+      ],
+    });
+    expect(current?.variant).toBe("commodity-constructions");
+    expect(current?.filters.commodity_diff).toBe("yes");
+    expect(current?.sorting).toEqual([
+      { id: "colonisation:commodity-constructions:diff", desc: true },
+    ]);
+  });
+
+  it("migrates a legacy preference into the current view collection", () => {
+    const fallback = defaultViewPreference("evaluations", ["cmdr"]);
+    const collection = viewCollectionPayload(
+      {
+        filters: { commander: "Test Pilot" },
+        sorting: [{ id: "missions", desc: true }],
+        visibleColumns: ["cmdr"],
+        pageSize: 25,
+      },
+      fallback,
+    );
+    expect(collection.current.filters.commander).toBe("Test Pilot");
+    expect(collection.views).toEqual([]);
+    expect(collection.activeViewId).toBeNull();
+  });
+
+  it("rejects duplicate names and missing active views", () => {
+    const current = defaultViewPreference("evaluations", ["cmdr"]);
+    const now = new Date().toISOString();
+    expect(
+      viewCollectionSchema.safeParse({
+        current,
+        activeViewId: "missing",
+        views: [
+          {
+            id: "one",
+            name: "My view",
+            view: current,
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "two",
+            name: "MY VIEW",
+            view: current,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });

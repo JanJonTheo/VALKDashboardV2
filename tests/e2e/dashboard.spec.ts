@@ -929,3 +929,55 @@ test("admins can manage protected factions without exposing webhook secrets", as
     .analyze();
   expect(accessibility.violations).toEqual([]);
 });
+
+test("refresh actions and named views preserve their distinct semantics", async ({
+  page,
+}) => {
+  let storedPreference: unknown = null;
+  await page.route("**/api/preferences/leaderboard", async (route) => {
+    if (route.request().method() === "PUT") {
+      storedPreference = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: storedPreference }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: null }),
+    });
+  });
+
+  await page.goto("/analytics/leaderboard");
+  const period = page.getByRole("combobox", { name: "Period" });
+  await expect(period).toHaveValue("cm");
+  await period.selectOption("all");
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(period).toHaveValue("all");
+
+  await page
+    .getByRole("button", { name: "Reset view and refresh dashboard" })
+    .click();
+  await expect(period).toHaveValue("cm");
+
+  await period.selectOption("lm");
+  await page.getByRole("button", { name: "Views" }).click();
+  await page.getByRole("menuitem", { name: "Save current view as…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Save current view" });
+  await dialog.getByRole("textbox", { name: "View name" }).fill("Last month");
+  await dialog.getByRole("button", { name: "Save view" }).click();
+  await expect(page.getByRole("button", { name: /Last month/ })).toBeVisible();
+
+  await period.selectOption("all");
+  await page.getByRole("button", { name: /Last month/ }).click();
+  await page.getByRole("menuitem", { name: "Last month" }).click();
+  await expect(period).toHaveValue("lm");
+  await expect
+    .poll(() =>
+      Array.isArray((storedPreference as { views?: unknown[] } | null)?.views),
+    )
+    .toBe(true);
+});

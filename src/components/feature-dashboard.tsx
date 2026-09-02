@@ -42,6 +42,7 @@ import {
   filterColonisationContributionRecords,
   filterColonisationConstructions,
   groupColonisationContributionRecords,
+  groupColonisationCommodities,
   includeUnattributedColonisationContributionGroups,
   includeUnattributedColonisationContributionRecords,
   visualAnalysisConstructions,
@@ -69,9 +70,12 @@ import { formatValue } from "@/lib/utils";
 import { FeatureChart } from "./chart";
 import { CopyTextButton } from "./copy-text-button";
 import { DataExplorer } from "./data-explorer";
+import { PageViewRegistration } from "./page-view-context";
+import { SavedViewsControl } from "./saved-views-control";
 import {
   ColonisationCommanderProgressChart,
   ColonisationCommodityGroupedTable,
+  ColonisationCommodityConstructionsTable,
   ColonisationContributionsChart,
   ColonisationContributionsTable,
   ColonisationContributionRecordsTable,
@@ -79,6 +83,7 @@ import {
   ColonisationProgressChart,
   colonisationCommanderGroupKey,
   colonisationCommodityGroupKey,
+  colonisationCommodityConstructionGroupKey,
   colonisationContributionCommanderGroupKey,
   colonisationContributionConstructionGroupKey,
   type ColonisationSort,
@@ -181,7 +186,11 @@ function actualDataOptions(
 }
 
 type ColonisationVariant =
-  "contributions" | "constructions" | "commodities" | "contribution-events";
+  | "contributions"
+  | "constructions"
+  | "commodities"
+  | "contribution-events"
+  | "commodity-constructions";
 
 const colonisationSortDefaults: Record<ColonisationVariant, ColonisationSort> =
   {
@@ -189,6 +198,7 @@ const colonisationSortDefaults: Record<ColonisationVariant, ColonisationSort> =
     constructions: { key: "construction", direction: "asc" },
     commodities: { key: "construction", direction: "asc" },
     "contribution-events": { key: "date", direction: "asc" },
+    "commodity-constructions": { key: "commodity", direction: "asc" },
   };
 
 const colonisationSortOptions: Record<
@@ -232,6 +242,15 @@ const colonisationSortOptions: Record<
     { value: "status", label: "Status" },
     { value: "delivered", label: "Delivered" },
   ],
+  "commodity-constructions": [
+    { value: "commodity", label: "Commodity" },
+    { value: "construction", label: "Construction" },
+    { value: "system", label: "System" },
+    { value: "status", label: "Status" },
+    { value: "need", label: "Need" },
+    { value: "delivered", label: "Delivered" },
+    { value: "diff", label: "Diff" },
+  ],
 };
 
 export function FeatureDashboard({
@@ -245,8 +264,8 @@ export function FeatureDashboard({
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const query = searchParams.get("q") ?? "";
   const savedView = useViewPreference(spec, searchParams);
+  const query = savedView.view.search ?? searchParams.get("q") ?? "";
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, unknown> | null>(
     null,
@@ -266,6 +285,7 @@ export function FeatureDashboard({
       "status",
       "system",
       "commodity",
+      "commodity_diff",
       "visual_limit",
     ])
       effectiveParams.delete(key);
@@ -384,13 +404,19 @@ export function FeatureDashboard({
         ? "commodities"
         : requestedColonisationVariant === "contribution-events"
           ? "contribution-events"
-          : "contributions";
+          : requestedColonisationVariant === "commodity-constructions"
+            ? "commodity-constructions"
+            : "contributions";
   const isConstructionCommanderView =
     isColonisationView && colonisationVariant === "constructions";
   const isConstructionCommodityView =
     isColonisationView && colonisationVariant === "commodities";
+  const isCommodityConstructionView =
+    isColonisationView && colonisationVariant === "commodity-constructions";
   const isConstructionView =
-    isConstructionCommanderView || isConstructionCommodityView;
+    isConstructionCommanderView ||
+    isConstructionCommodityView ||
+    isCommodityConstructionView;
   const isContributionView =
     isColonisationView && colonisationVariant === "contributions";
   const isContributionRecordView =
@@ -434,6 +460,7 @@ export function FeatureDashboard({
       status: viewFilterString(savedView.view.filters.status),
       system: viewFilterString(savedView.view.filters.system),
       commodity: viewFilterValues(savedView.view.filters.commodity),
+      commodityDiff: viewFilterString(savedView.view.filters.commodity_diff),
       fromDate: viewFilterString(savedView.view.filters.from_date),
       toDate: viewFilterString(savedView.view.filters.to_date),
     }),
@@ -478,8 +505,9 @@ export function FeatureDashboard({
         sourceContributionGroups,
         query,
         colonisationFilters,
+        sourceConstructions,
       ),
-    [sourceContributionGroups, query, colonisationFilters],
+    [sourceContributionGroups, query, colonisationFilters, sourceConstructions],
   );
   const contributionRecords = useMemo(
     () =>
@@ -487,8 +515,18 @@ export function FeatureDashboard({
         sourceContributionRecords,
         query,
         colonisationFilters,
+        sourceConstructions,
       ),
-    [sourceContributionRecords, query, colonisationFilters],
+    [
+      sourceContributionRecords,
+      query,
+      colonisationFilters,
+      sourceConstructions,
+    ],
+  );
+  const commodityConstructionGroups = useMemo(
+    () => groupColonisationCommodities(constructions),
+    [constructions],
   );
   const contributionRecordGroups = useMemo(
     () => groupColonisationContributionRecords(contributionRecords),
@@ -563,7 +601,9 @@ export function FeatureDashboard({
     };
     return regular
       .filter(
-        (filter) => filter.key !== "visual_limit" || !isContributionRecordView,
+        (filter) =>
+          filter.key !== "visual_limit" ||
+          (!isContributionRecordView && !isCommodityConstructionView),
       )
       .map((filter) => {
         if (filter.key === "period") {
@@ -589,6 +629,7 @@ export function FeatureDashboard({
   }, [
     isColonisationView,
     isContributionRecordView,
+    isCommodityConstructionView,
     savedView.view.filters,
     sourceConstructions,
     sourceContributionGroups,
@@ -640,14 +681,17 @@ export function FeatureDashboard({
   );
   const allCollapsedCommodityIds = useMemo(
     () =>
-      new Set(
-        constructions.flatMap((construction) =>
+      new Set([
+        ...constructions.flatMap((construction) =>
           colonisationCommodityGroups(construction).map((group) =>
             colonisationCommodityGroupKey(construction.id, group.commodity.key),
           ),
         ),
-      ),
-    [constructions],
+        ...commodityConstructionGroups.map((group) =>
+          colonisationCommodityConstructionGroupKey(group.key),
+        ),
+      ]),
+    [constructions, commodityConstructionGroups],
   );
   const effectiveCollapsedConstructionIds =
     collapsedConstructionIds ?? allCollapsedConstructionIds;
@@ -743,6 +787,39 @@ export function FeatureDashboard({
     if (value) next.set("q", value);
     else next.delete("q");
     replaceParams(next);
+    savedView.setView((current) => ({ ...current, search: value }));
+  };
+
+  const replaceViewParams = (view: ViewPreference) => {
+    const next = new URLSearchParams();
+    if (view.search) next.set("q", view.search);
+    if (view.period) next.set("period", view.period);
+    if (view.metric) next.set("metric", view.metric);
+    for (const filter of spec.filters) {
+      if (filter.key === "period") continue;
+      for (const value of viewFilterValues(view.filters[filter.key]))
+        next.append(filter.key, value);
+    }
+    const key =
+      spec.key === "evaluations"
+        ? "mode"
+        : spec.key === "colonisation"
+          ? "view"
+          : spec.key === "cz-summary"
+            ? "type"
+            : null;
+    if (key && view.variant) next.set(key, view.variant);
+    if (view.pageSize !== 25) next.set("page_size", String(view.pageSize));
+    replaceParams(next);
+    resetColonisationGroups();
+  };
+
+  const resetCurrentView = () => {
+    savedView.reset();
+    replaceParams(new URLSearchParams());
+    resetColonisationGroups();
+    setSelected(null);
+    setFiltersOpen(false);
   };
   const setVariant = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -827,11 +904,23 @@ export function FeatureDashboard({
 
   return (
     <>
+      <PageViewRegistration
+        controller={{
+          reset: resetCurrentView,
+          refresh: () => queryState.refetch(),
+        }}
+      />
       <PageHeader
         spec={effectiveSpec}
         generatedAt={queryState.data?.generated_at}
         onRefresh={() => queryState.refetch()}
         refreshing={queryState.isFetching}
+        views={
+          <SavedViewsControl
+            model={savedView}
+            onViewApplied={replaceViewParams}
+          />
+        }
       />
       {spec.key === "leaderboard" && (
         <LeaderboardControls
@@ -857,22 +946,7 @@ export function FeatureDashboard({
             next.delete("page");
             replaceParams(next);
           }}
-          onReset={async () => {
-            await savedView.reset();
-            const next = new URLSearchParams(searchParams.toString());
-            for (const key of [
-              "period",
-              "metric",
-              "from_date",
-              "to_date",
-              "from_month",
-              "to_month",
-              "system_name",
-              "page_size",
-            ])
-              next.delete(key);
-            replaceParams(next);
-          }}
+          onReset={resetCurrentView}
         />
       )}
       <VariantTabs
@@ -953,6 +1027,7 @@ export function FeatureDashboard({
       {effectiveSpec.chart &&
         canLoad &&
         !isContributionRecordView &&
+        !isCommodityConstructionView &&
         (isConstructionView
           ? constructions.length > 0
           : isContributionView
@@ -1060,8 +1135,7 @@ export function FeatureDashboard({
                     for (const filter of spec.filters) next.delete(filter.key);
                     replaceParams(next);
                   }
-                  resetColonisationGroups();
-                  void savedView.reset();
+                  resetCurrentView();
                 }}
               >
                 <RotateCcw size={15} />
@@ -1142,6 +1216,20 @@ export function FeatureDashboard({
               toggleCollapsedValue(
                 setCollapsedCommodityIds,
                 colonisationCommodityGroupKey(constructionId, commodityKey),
+                allCollapsedCommodityIds,
+              )
+            }
+          />
+        ) : isCommodityConstructionView ? (
+          <ColonisationCommodityConstructionsTable
+            groups={commodityConstructionGroups}
+            sort={colonisationSort}
+            onSort={toggleColonisationSort}
+            collapsedCommodityIds={effectiveCollapsedCommodityIds}
+            onToggleCommodity={(commodityKey) =>
+              toggleCollapsedValue(
+                setCollapsedCommodityIds,
+                colonisationCommodityConstructionGroupKey(commodityKey),
                 allCollapsedCommodityIds,
               )
             }
@@ -1284,15 +1372,17 @@ export function FeatureDashboard({
           className={`table-footer${isColonisationView ? " colonisation-table-footer" : ""}`}
         >
           <span>
-            {isConstructionView
-              ? isConstructionCommanderView
-                ? `${constructions.length} constructions · ${constructions.reduce((count, construction) => count + colonisationCommanderGroups(construction).length, 0)} commander groups · ${constructions.reduce((count, construction) => count + construction.commodities.length, 0)} commodities`
-                : `${constructions.length} constructions · ${constructions.reduce((count, construction) => count + construction.commodities.length, 0)} commodity groups · ${constructions.reduce((count, construction) => count + colonisationCommodityGroups(construction).reduce((contributionCount, group) => contributionCount + group.contributions.length, 0), 0)} Cmdr contributions`
-              : isContributionView
-                ? `${contributionGroups.length} commanders · ${contributionGroups.reduce((count, group) => count + group.constructions.length, 0)} constructions · ${contributionGroups.reduce((count, group) => count + group.constructions.reduce((commodityCount, construction) => commodityCount + construction.commodities.length, 0), 0)} commodity groups`
-                : isContributionRecordView
-                  ? `${contributionRecordGroups.length} constructions · ${contributionRecordGroups.reduce((count, construction) => count + construction.commanders.length, 0)} commander groups · ${contributionRecords.length} contributions`
-                  : `Showing ${rows.length} of ${total} rows`}
+            {isCommodityConstructionView
+              ? `${commodityConstructionGroups.length} commodity groups · ${constructions.length} constructions · ${commodityConstructionGroups.reduce((count, group) => count + group.constructions.length, 0)} construction entries`
+              : isConstructionView
+                ? isConstructionCommanderView
+                  ? `${constructions.length} constructions · ${constructions.reduce((count, construction) => count + colonisationCommanderGroups(construction).length, 0)} commander groups · ${constructions.reduce((count, construction) => count + construction.commodities.length, 0)} commodities`
+                  : `${constructions.length} constructions · ${constructions.reduce((count, construction) => count + construction.commodities.length, 0)} commodity groups · ${constructions.reduce((count, construction) => count + colonisationCommodityGroups(construction).reduce((contributionCount, group) => contributionCount + group.contributions.length, 0), 0)} Cmdr contributions`
+                : isContributionView
+                  ? `${contributionGroups.length} commanders · ${contributionGroups.reduce((count, group) => count + group.constructions.length, 0)} constructions · ${contributionGroups.reduce((count, group) => count + group.constructions.reduce((commodityCount, construction) => commodityCount + construction.commodities.length, 0), 0)} commodity groups`
+                  : isContributionRecordView
+                    ? `${contributionRecordGroups.length} constructions · ${contributionRecordGroups.reduce((count, construction) => count + construction.commanders.length, 0)} commander groups · ${contributionRecords.length} contributions`
+                    : `Showing ${rows.length} of ${total} rows`}
           </span>
           {!isColonisationView && (
             <label className="page-size-select">
@@ -1531,11 +1621,13 @@ function PageHeader({
   generatedAt,
   onRefresh,
   refreshing,
+  views,
 }: {
   spec: FeatureSpec;
   generatedAt?: string;
   onRefresh: () => unknown;
   refreshing: boolean;
+  views?: React.ReactNode;
 }) {
   return (
     <header className="page-header">
@@ -1545,6 +1637,7 @@ function PageHeader({
         <p>{spec.description}</p>
       </div>
       <div>
+        {views}
         <span className="live-status">
           <i />
           Live data
@@ -1594,6 +1687,7 @@ function VariantTabs({
               ["constructions", "Construction/Cmdrs"],
               ["commodities", "Construction/Commodities"],
               ["contribution-events", "Construction/Contribution"],
+              ["commodity-constructions", "Commodities/Constructions"],
             ],
           }
         : spec.key === "cz-summary"

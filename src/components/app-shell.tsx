@@ -1,6 +1,7 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   BarChart3,
@@ -29,6 +30,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import type { DashboardSession } from "@/lib/access";
 import { cn } from "@/lib/utils";
+import { usePageViewActions } from "@/components/page-view-context";
 
 const groups = [
   { label: "Overview", links: [{ href: "/", label: "Home", icon: Home }] },
@@ -113,18 +115,16 @@ export function AppShell({
 }) {
   const path = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [refreshed, setRefreshed] = useState("just now");
   const [unreadAlerts, setUnreadAlerts] = useState(0);
+  const { resetAndRefresh, refreshing, updatedLabel } = usePageViewActions();
   const visibleGroups = groups.filter(
     (group) => !group.admin || session.role === "admin",
   );
-  const refresh = () => {
-    window.dispatchEvent(new CustomEvent("valk:refresh"));
-    setRefreshed("just now");
-  };
   const signOut = async () => {
     await fetch("/api/session/logout", { method: "POST" });
+    queryClient.clear();
     router.replace("/sign-in");
     router.refresh();
   };
@@ -264,13 +264,14 @@ export function AppShell({
             </div>
           )}
           <div className="topbar-spacer" />
-          <span className="refresh-label">Updated {refreshed}</span>
           <button
-            className="square-button"
-            onClick={refresh}
-            aria-label="Refresh dashboard"
+            className="topbar-reset-refresh"
+            onClick={() => void resetAndRefresh().then(() => router.refresh())}
+            aria-label="Reset view and refresh dashboard"
+            disabled={refreshing}
           >
-            <RefreshCw size={17} />
+            <span className="refresh-label">{updatedLabel}</span>
+            <RefreshCw className={refreshing ? "spin" : ""} size={17} />
           </button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger

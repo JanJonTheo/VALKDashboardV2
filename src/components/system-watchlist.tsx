@@ -7,30 +7,44 @@ import Image from "next/image";
 import {
   Activity,
   AlertTriangle,
+  ArrowDown,
   ArrowDownUp,
   BellRing,
+  Bot,
   Building2,
   Check,
   ChartColumn,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   Clock3,
+  Construction,
   ExternalLink,
   Factory,
   Flag,
+  Flame,
+  FlaskConical,
   History,
+  Leaf,
   ListFilter,
-  MapPin,
   Map as MapIcon,
+  Minus,
   Orbit,
+  PartyPopper,
   Plus,
   RefreshCw,
   Shield,
   ShieldCheck,
+  Skull,
   Star,
+  Sun,
   Swords,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   Users,
+  Vote,
+  WheatOff,
   X,
   Zap,
   type LucideIcon,
@@ -43,6 +57,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type SetStateAction,
 } from "react";
 import {
   assignFactionColours,
@@ -72,16 +87,25 @@ import {
 import { CopyTextButton } from "@/components/copy-text-button";
 import { BgsAiPanel } from "@/components/bgs-ai-panel";
 import { BgsRuleManager } from "@/components/bgs-rule-manager";
+import { PageViewRegistration } from "@/components/page-view-context";
+import { SavedViewsControl } from "@/components/saved-views-control";
+import { viewFilterString, type ViewPreference } from "@/lib/preferences";
+import { useStoredViewPreference } from "@/lib/use-view-preference";
+import { bgsStatePresentation, type BgsStateIcon } from "@/lib/bgs-state";
+import {
+  stationCategory,
+  stationCategoryTabs,
+  stationIconKind,
+  stationMatchesCategory,
+  type StationIconKind,
+  type StationCategory,
+} from "@/lib/system-stations";
 
 interface WatchlistPayload {
   watchlist: SystemWatchlistEntry[];
   systems: WatchedSystem[];
   facilityStatistics: WatchlistFacilityStatistics;
   generatedAt: string;
-}
-
-interface SortPreferenceEnvelope {
-  data: { payload?: { sorting?: { id?: string; desc?: boolean }[] } } | null;
 }
 
 type WatchlistScope = "personal" | "global" | "protected";
@@ -108,8 +132,6 @@ interface ProtectedWatchlistPayload extends GlobalWatchlistPayload {
   selectedProtectedFactionId: number | null;
 }
 
-const watchlistSortPreferenceKey = "bgs-system-watchlist-sort";
-
 const superpowerIconSources: Record<string, string> = {
   alliance: "/superpowers/alliance.svg",
   empire: "/superpowers/empire.svg",
@@ -118,7 +140,13 @@ const superpowerIconSources: Record<string, string> = {
 };
 
 function superpowerIconSource(allegiance: string) {
-  return superpowerIconSources[allegiance.trim().toLowerCase()];
+  const normalized = allegiance
+    .trim()
+    .toLocaleLowerCase("en")
+    .replace(/^\$/, "")
+    .replace(/;$/, "");
+  const key = normalized.split(/[_\s]+/).at(-1) ?? "";
+  return superpowerIconSources[key];
 }
 
 function filterOptionValues(
@@ -137,19 +165,27 @@ function activeFilterCount(filters: WatchlistFilters, scope: WatchlistScope) {
   ).length;
 }
 
-async function loadWatchlistSortPreference(): Promise<SortPreferenceEnvelope> {
-  const response = await fetch(
-    `/api/preferences/${watchlistSortPreferenceKey}`,
-    { cache: "no-store" },
-  );
-  if (!response.ok) throw new Error("Watchlist sort could not be loaded");
-  return response.json();
+type WatchlistViewChange = {
+  filters?: WatchlistFilters;
+  sortField?: WatchlistSortField | GlobalWatchlistSortField;
+  sortDescending?: boolean;
+  protectedFactionId?: number | null;
+};
+
+interface WatchlistViewProps {
+  viewFilters: WatchlistFilters;
+  viewSortField: string;
+  viewSortDescending: boolean;
+  viewProtectedFactionId: number | null;
+  onViewChange: (change: WatchlistViewChange) => void;
 }
 
 interface SystemStation {
   id: string;
   market_id: string;
   name: string;
+  carrier_name: string;
+  carrier_owner: string;
   type: string;
   is_settlement: boolean;
   distance_to_arrival: number | null;
@@ -176,6 +212,79 @@ interface StationPayload {
   cache_status?: "HIT" | "MISS" | "STALE";
   stale?: boolean;
   stations: SystemStation[];
+}
+
+const stationIconSources: Partial<Record<StationIconKind, string>> = {
+  coriolis: "/station-icons/coriolis.svg",
+  dodec: "/station-icons/dodec.svg",
+  orbis: "/station-icons/orbis.svg",
+  ocellus: "/station-icons/ocellus.svg",
+  "asteroid-base": "/station-icons/asteroid-base.svg",
+  outpost: "/station-icons/outpost.svg",
+  "surface-port": "/station-icons/surface-port.svg",
+  "surface-outpost": "/station-icons/surface-port.svg",
+  settlement: "/station-icons/settlement.svg",
+};
+
+function StationGameIcon({ kind }: { kind: StationIconKind }) {
+  const source = stationIconSources[kind];
+  if (source)
+    return (
+      <Image
+        className="watch-station-game-icon"
+        data-kind={kind}
+        src={source}
+        width={24}
+        height={24}
+        alt=""
+        aria-hidden="true"
+        unoptimized
+      />
+    );
+  const content = (() => {
+    switch (kind) {
+      case "installation-space":
+        return (
+          <>
+            <path d="m12 7 5 3v5l-5 3-5-3v-5l5-3Z" />
+            <path d="M2 12h5M17 12h5M12 2v5M12 18v4" />
+            <circle cx="3" cy="12" r="1" />
+            <circle cx="21" cy="12" r="1" />
+          </>
+        );
+      case "installation-planetary":
+        return (
+          <>
+            <path d="M2 21h20M4 21V9h5v12M9 13l5-3v11M14 14l6-3v10" />
+            <path d="M5.5 5h2v4M6 15h1M11 16h1M16 16h2" />
+          </>
+        );
+      case "fleet-carrier":
+        return (
+          <>
+            <path d="M2 15h17l3 3H6l-4-3ZM6 15V9h10l3 6M9 9V6h5l2 3" />
+            <path d="M4 19h15" />
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="m12 3 8 9-8 9-8-9 8-9Z" />
+            <circle cx="12" cy="12" r="2" />
+          </>
+        );
+    }
+  })();
+  return (
+    <svg
+      className="watch-station-game-icon"
+      data-kind={kind}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      {content}
+    </svg>
+  );
 }
 
 async function loadWatchlist(): Promise<WatchlistPayload> {
@@ -803,10 +912,32 @@ function StationList({
   cacheStatus?: StationPayload["cache_status"];
   stale?: boolean;
 }) {
+  const [activeCategory, setActiveCategory] = useState<StationCategory>("all");
   const stationCount = stations.filter(
     (station) => !station.is_settlement,
   ).length;
   const settlementCount = stations.length - stationCount;
+  const categoryCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        stationCategoryTabs.map(({ value }) => [
+          value,
+          value === "all"
+            ? stations.length
+            : stations.filter((station) =>
+                stationMatchesCategory(station, value),
+              ).length,
+        ]),
+      ) as Record<StationCategory, number>,
+    [stations],
+  );
+  const visibleStations = useMemo(
+    () =>
+      stations.filter((station) =>
+        stationMatchesCategory(station, activeCategory),
+      ),
+    [activeCategory, stations],
+  );
   return (
     <section className="watch-stations-section">
       <header>
@@ -827,61 +958,102 @@ function StationList({
         )}
       </header>
       {stations.length ? (
-        <div className="watch-station-list">
-          {stations.map((station) => (
-            <article key={station.id || `${station.name}-${station.type}`}>
-              <div className="watch-station-title">
-                {station.is_settlement ? (
-                  <MapPin size={16} aria-hidden="true" />
-                ) : (
-                  <Building2 size={16} aria-hidden="true" />
-                )}
-                <div>
-                  <strong>{station.name}</strong>
-                  <span>{station.type}</span>
-                </div>
-                {station.distance_to_arrival !== null && (
-                  <b>
-                    {new Intl.NumberFormat("en-GB", {
-                      maximumFractionDigits: 0,
-                    }).format(station.distance_to_arrival)}{" "}
-                    ls
-                  </b>
-                )}
-              </div>
-              <dl>
-                <div>
-                  <dt>Faction</dt>
-                  <dd>{station.controlling_faction || "—"}</dd>
-                </div>
-                <div>
-                  <dt>Body</dt>
-                  <dd>{station.body || "Space"}</dd>
-                </div>
-                <div>
-                  <dt>Economy</dt>
-                  <dd>
-                    {[station.economy, station.second_economy]
-                      .filter(Boolean)
-                      .join(" / ") || "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Updated</dt>
-                  <dd>{formatUpdated(station.updated_at)}</dd>
-                </div>
-              </dl>
-              <div className="watch-station-services" aria-label="Services">
-                {station.have_market && <span>Market</span>}
-                {station.have_shipyard && <span>Shipyard</span>}
-                {station.have_outfitting && <span>Outfitting</span>}
-                {station.services.slice(0, 4).map((service) => (
-                  <span key={service}>{service}</span>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
+        <>
+          <div
+            className="watch-station-tabs"
+            role="tablist"
+            aria-label="Filter stations and settlements"
+          >
+            {stationCategoryTabs.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === value}
+                onClick={() => setActiveCategory(value)}
+              >
+                {label} <span>{categoryCounts[value]}</span>
+              </button>
+            ))}
+          </div>
+          {visibleStations.length ? (
+            <div className="watch-station-list" role="tabpanel">
+              {visibleStations.map((station) => {
+                const category = stationCategory(station);
+                const isCarrier = category === "fleet-carriers";
+                const iconKind = stationIconKind(station);
+                const displayName =
+                  isCarrier &&
+                  station.carrier_name &&
+                  station.carrier_name !== station.name
+                    ? `${station.carrier_name} (${station.name})`
+                    : station.name;
+                return (
+                  <article
+                    key={station.id || `${station.name}-${station.type}`}
+                  >
+                    <div className="watch-station-title">
+                      <StationGameIcon kind={iconKind} />
+                      <div>
+                        <strong title={displayName}>{displayName}</strong>
+                        <span>{station.type}</span>
+                      </div>
+                      {station.distance_to_arrival !== null && (
+                        <b>
+                          {new Intl.NumberFormat("en-GB", {
+                            maximumFractionDigits: 0,
+                          }).format(station.distance_to_arrival)}{" "}
+                          ls
+                        </b>
+                      )}
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>{isCarrier ? "Owner" : "Faction"}</dt>
+                        <dd>
+                          {isCarrier
+                            ? station.carrier_owner || "Not published by Spansh"
+                            : station.controlling_faction || "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Body</dt>
+                        <dd>{station.body || "Space"}</dd>
+                      </div>
+                      <div>
+                        <dt>Economy</dt>
+                        <dd>
+                          {[station.economy, station.second_economy]
+                            .filter(Boolean)
+                            .join(" / ") || "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Updated</dt>
+                        <dd>{formatUpdated(station.updated_at)}</dd>
+                      </div>
+                    </dl>
+                    <div
+                      className="watch-station-services"
+                      aria-label="Services"
+                    >
+                      {station.have_market && <span>Market</span>}
+                      {station.have_shipyard && <span>Shipyard</span>}
+                      {station.have_outfitting && <span>Outfitting</span>}
+                      {station.services.slice(0, 4).map((service) => (
+                        <span key={service}>{service}</span>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="inline-empty watch-station-empty">
+              No facilities in this category.
+            </p>
+          )}
+        </>
       ) : (
         <p className="inline-empty">No stations or settlements reported.</p>
       )}
@@ -971,6 +1143,85 @@ function EdgisSystemMapContent({ system }: { system: string }) {
   );
 }
 
+const bgsStateIcons: Record<BgsStateIcon, LucideIcon> = {
+  swords: Swords,
+  vote: Vote,
+  "trending-up": TrendingUp,
+  "trending-down": TrendingDown,
+  flame: Flame,
+  "wheat-off": WheatOff,
+  flask: FlaskConical,
+  coins: CircleDollarSign,
+  party: PartyPopper,
+  construction: Construction,
+  sun: Sun,
+  leaf: Leaf,
+  skull: Skull,
+  "arrow-down": ArrowDown,
+  minus: Minus,
+};
+
+function BgsStateCell({ states }: { states: string[] }) {
+  const values = states.length ? states : [""];
+  return (
+    <div className="watch-state-list">
+      {values.map((state, index) => {
+        const presentation = bgsStatePresentation(state);
+        const Icon = bgsStateIcons[presentation.icon];
+        return (
+          <span
+            className="watch-state-chip"
+            key={`${presentation.key}-${index}`}
+            style={
+              {
+                "--state-colour": presentation.colour,
+              } as CSSProperties
+            }
+          >
+            <Icon size={11} aria-hidden="true" />
+            {presentation.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function BgsAiDialog({
+  system,
+  open,
+  onOpenChange,
+  canRun,
+}: {
+  system: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  canRun: boolean;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="modal-content bgs-ai-dialog">
+          <div className="sheet-heading">
+            <div>
+              <Dialog.Title>BGS AI intelligence</Dialog.Title>
+              <Dialog.Description>{system}</Dialog.Description>
+            </div>
+            <Dialog.Close aria-label="Close BGS AI intelligence">
+              <X size={19} />
+            </Dialog.Close>
+          </div>
+          <BgsAiPanel system={system} canRun={canRun} />
+          <footer>
+            <Dialog.Close className="primary-button">Done</Dialog.Close>
+          </footer>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 function SystemRecordDetail({
   system,
   open,
@@ -984,6 +1235,16 @@ function SystemRecordDetail({
 }) {
   const colours = assignFactionColours(system.factions);
   const [mapOpen, setMapOpen] = useState(false);
+  const conflictTypes = useMemo(
+    () => [
+      ...new Set(
+        system.conflicts.map(
+          (conflict) => bgsStatePresentation(conflict.type || "Conflict").label,
+        ),
+      ),
+    ],
+    [system.conflicts],
+  );
   const stationQuery = useQuery({
     queryKey: ["system-stations", system.name],
     queryFn: () => loadStations(system.name),
@@ -1003,9 +1264,20 @@ function SystemRecordDetail({
                 Current system, facility and settled seven-day BGS data.
               </Dialog.Description>
             </div>
-            <Dialog.Close aria-label="Close details">
-              <X size={19} />
-            </Dialog.Close>
+            <div className="sheet-heading-actions">
+              {system.conflicts.length > 0 && (
+                <span
+                  className="watch-detail-conflict-chip"
+                  title={`${system.conflicts.length} current conflict${system.conflicts.length === 1 ? "" : "s"}`}
+                >
+                  <Swords size={13} aria-hidden="true" />
+                  {conflictTypes.join(" · ")}
+                </span>
+              )}
+              <Dialog.Close aria-label="Close details">
+                <X size={19} />
+              </Dialog.Close>
+            </div>
           </div>
           <dl className="detail-list">
             <div>
@@ -1112,34 +1384,50 @@ function SystemRecordDetail({
               </div>
             </section>
           )}
-          <div className="system-details watch-history-factions">
-            <section>
-              <h3>Minor factions</h3>
-              <div className="system-detail-rows">
-                {system.factions.map((faction) => {
-                  const colour = colours.get(faction.name) ?? "#e8bd52";
-                  return (
-                    <div
-                      className="watch-history-faction-row"
-                      key={faction.name}
-                      style={factionFillStyle(faction, colour)}
-                      aria-label={`${faction.name}, influence ${faction.influence.toFixed(2)} percent`}
-                    >
-                      <strong>
-                        <i style={{ backgroundColor: colour }} />
-                        {faction.name}
-                      </strong>
-                      <span>
-                        Active: {faction.activeStates.join(", ") || "None"} ·
-                        Pending: {faction.pendingStates.join(", ") || "None"}
-                      </span>
-                      <b>{faction.influence.toFixed(2)}%</b>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
+          <section className="watch-history-factions">
+            <h3>Minor factions</h3>
+            <div className="watch-faction-table-wrap">
+              <table className="watch-faction-table">
+                <thead>
+                  <tr>
+                    <th>Faction</th>
+                    <th>Active state</th>
+                    <th>Pending state</th>
+                    <th>Influence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {system.factions.map((faction) => {
+                    const colour = colours.get(faction.name) ?? "#e8bd52";
+                    return (
+                      <tr
+                        className="watch-history-faction-row"
+                        key={faction.name}
+                        style={factionFillStyle(faction, colour)}
+                        aria-label={`${faction.name}, influence ${faction.influence.toFixed(2)} percent`}
+                      >
+                        <td>
+                          <strong>
+                            <i style={{ backgroundColor: colour }} />
+                            {faction.name}
+                          </strong>
+                        </td>
+                        <td>
+                          <BgsStateCell states={faction.activeStates} />
+                        </td>
+                        <td>
+                          <BgsStateCell states={faction.pendingStates} />
+                        </td>
+                        <td>
+                          <b>{faction.influence.toFixed(2)}%</b>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
           {system.conflicts.length > 0 && (
             <section className="watch-conflict-detail">
               <header>
@@ -1419,6 +1707,7 @@ export function SystemStrip({
   const [activeFaction, setActiveFaction] = useState<string>();
   const [detailOpen, setDetailOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const matchedPresenceFactions = useMemo(() => {
     const candidates = presenceFactionNames?.length
       ? presenceFactionNames
@@ -1516,6 +1805,17 @@ export function SystemStrip({
           >
             <BellRing size={14} aria-hidden="true" />
           </button>
+          {scope !== "personal" && system.available && (
+            <button
+              type="button"
+              className="watch-ai-button"
+              onClick={() => setAiOpen(true)}
+              aria-label={`Open BGS AI intelligence for ${entry.system}`}
+              title="Open BGS AI intelligence"
+            >
+              <Bot size={14} aria-hidden="true" />
+            </button>
+          )}
           {scope === "personal" ? (
             <button
               type="button"
@@ -1620,6 +1920,12 @@ export function SystemStrip({
         system={system.name}
         open={mapOpen}
         onOpenChange={setMapOpen}
+      />
+      <BgsAiDialog
+        system={system.name}
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        canRun={canRunBgsAi}
       />
     </article>
   );
@@ -1934,77 +2240,46 @@ function PersonalSystemWatchlist({
   tenantFactionName,
   canManageTenantRules,
   canRunBgsAi,
+  viewFilters,
+  viewSortField,
+  viewSortDescending,
+  onViewChange,
 }: {
   active: boolean;
   tenantFactionName: string;
   canManageTenantRules: boolean;
   canRunBgsAi: boolean;
-}) {
+} & WatchlistViewProps) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [statisticsOpen, setStatisticsOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [ruleSystem, setRuleSystem] = useState<string>();
-  const [filters, setFilters] = useState<WatchlistFilters>({
-    ...emptyWatchlistFilters,
-  });
-  const [sortField, setSortField] = useState<WatchlistSortField>("system");
-  const [sortDescending, setSortDescending] = useState(false);
-  const [sortReady, setSortReady] = useState(false);
-  const skipSortSave = useRef(true);
-  const sortPreference = useQuery({
-    queryKey: ["preference", watchlistSortPreferenceKey],
-    queryFn: loadWatchlistSortPreference,
-    staleTime: 60_000,
-  });
+  const filters = viewFilters;
+  const sortField = watchlistSortOptions.some(
+    (option) => option.value === viewSortField,
+  )
+    ? (viewSortField as WatchlistSortField)
+    : "system";
+  const sortDescending = viewSortDescending;
+  const setFilters = (change: SetStateAction<WatchlistFilters>) =>
+    onViewChange({
+      filters: typeof change === "function" ? change(filters) : change,
+    });
+  const setSortField = (next: WatchlistSortField) =>
+    onViewChange({ sortField: next });
+  const setSortDescending = (change: SetStateAction<boolean>) =>
+    onViewChange({
+      sortDescending:
+        typeof change === "function" ? change(sortDescending) : change,
+    });
   const query = useQuery({
     queryKey: ["system-watchlist-data"],
     queryFn: loadWatchlist,
     refetchInterval: active ? 60_000 : false,
     refetchIntervalInBackground: false,
   });
-  useEffect(() => {
-    if (sortReady || sortPreference.isPending) return;
-    const saved = sortPreference.data?.data?.payload?.sorting?.[0];
-    const timer = window.setTimeout(() => {
-      if (
-        saved?.id &&
-        watchlistSortOptions.some((option) => option.value === saved.id)
-      ) {
-        setSortField(saved.id as WatchlistSortField);
-        setSortDescending(Boolean(saved.desc));
-      }
-      skipSortSave.current = true;
-      setSortReady(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [sortPreference.data, sortPreference.isPending, sortReady]);
-  useEffect(() => {
-    if (!sortReady) return;
-    if (skipSortSave.current) {
-      skipSortSave.current = false;
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void fetch(`/api/preferences/${watchlistSortPreferenceKey}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          filters: {},
-          sorting: [{ id: sortField, desc: sortDescending }],
-          visibleColumns: [],
-          pageSize: 25,
-        }),
-        signal: controller.signal,
-      });
-    }, 500);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [sortDescending, sortField, sortReady]);
   const mutation = useMutation({
     mutationFn: saveWatchlist,
     onMutate: async (systems) => {
@@ -2318,20 +2593,36 @@ function GlobalSystemWatchlist({
   tenantFactionName,
   canManageTenantRules,
   canRunBgsAi,
+  viewFilters,
+  viewSortField,
+  viewSortDescending,
+  onViewChange,
 }: {
   active: boolean;
   tenantFactionName: string;
   canManageTenantRules: boolean;
   canRunBgsAi: boolean;
-}) {
+} & WatchlistViewProps) {
   const queryClient = useQueryClient();
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState<WatchlistFilters>({
-    ...emptyWatchlistFilters,
-  });
-  const [sortField, setSortField] =
-    useState<GlobalWatchlistSortField>("system");
-  const [sortDescending, setSortDescending] = useState(false);
+  const filters = viewFilters;
+  const sortField = globalWatchlistSortOptions.some(
+    (option) => option.value === viewSortField,
+  )
+    ? (viewSortField as GlobalWatchlistSortField)
+    : "system";
+  const sortDescending = viewSortDescending;
+  const setFilters = (change: SetStateAction<WatchlistFilters>) =>
+    onViewChange({
+      filters: typeof change === "function" ? change(filters) : change,
+    });
+  const setSortField = (next: GlobalWatchlistSortField) =>
+    onViewChange({ sortField: next });
+  const setSortDescending = (change: SetStateAction<boolean>) =>
+    onViewChange({
+      sortDescending:
+        typeof change === "function" ? change(sortDescending) : change,
+    });
   const [page, setPage] = useState(1);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [ruleSystem, setRuleSystem] = useState<string>();
@@ -2627,23 +2918,40 @@ function ProtectedFactionsSystemWatchlist({
   tenantFactionName,
   canManageTenantRules,
   canRunBgsAi,
+  viewFilters,
+  viewSortField,
+  viewSortDescending,
+  viewProtectedFactionId,
+  onViewChange,
 }: {
   active: boolean;
   tenantFactionName: string;
   canManageTenantRules: boolean;
   canRunBgsAi: boolean;
-}) {
+} & WatchlistViewProps) {
   const queryClient = useQueryClient();
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState<WatchlistFilters>({
-    ...emptyWatchlistFilters,
-  });
-  const [sortField, setSortField] =
-    useState<GlobalWatchlistSortField>("system");
-  const [sortDescending, setSortDescending] = useState(false);
-  const [selectedFactionId, setSelectedFactionId] = useState<number | null>(
-    null,
-  );
+  const filters = viewFilters;
+  const sortField = globalWatchlistSortOptions.some(
+    (option) => option.value === viewSortField,
+  )
+    ? (viewSortField as GlobalWatchlistSortField)
+    : "system";
+  const sortDescending = viewSortDescending;
+  const setFilters = (change: SetStateAction<WatchlistFilters>) =>
+    onViewChange({
+      filters: typeof change === "function" ? change(filters) : change,
+    });
+  const setSortField = (next: GlobalWatchlistSortField) =>
+    onViewChange({ sortField: next });
+  const setSortDescending = (change: SetStateAction<boolean>) =>
+    onViewChange({
+      sortDescending:
+        typeof change === "function" ? change(sortDescending) : change,
+    });
+  const selectedFactionId = viewProtectedFactionId;
+  const setSelectedFactionId = (value: number | null) =>
+    onViewChange({ protectedFactionId: value });
   const [page, setPage] = useState(1);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [ruleSystem, setRuleSystem] = useState<string>();
@@ -3008,61 +3316,168 @@ export function SystemWatchlist({
   canManageTenantRules: boolean;
   canRunBgsAi: boolean;
 }) {
-  const [scope, setScope] = useState<WatchlistScope>("personal");
+  const queryClient = useQueryClient();
+  const [viewGeneration, setViewGeneration] = useState(0);
+  const defaults = useMemo<ViewPreference>(
+    () => ({
+      filters: {},
+      sorting: [{ id: "system", desc: false }],
+      visibleColumns: [],
+      pageSize: 25,
+      variant: "personal",
+    }),
+    [],
+  );
+  const savedView = useStoredViewPreference(
+    "bgs-system-watchlist-view-state",
+    defaults,
+    undefined,
+    "bgs-system-watchlist-sort",
+  );
+  const scope: WatchlistScope = ["personal", "global", "protected"].includes(
+    savedView.view.variant ?? "",
+  )
+    ? (savedView.view.variant as WatchlistScope)
+    : "personal";
+  const filters = useMemo(
+    () =>
+      Object.fromEntries(
+        (
+          Object.keys(emptyWatchlistFilters) as Array<keyof WatchlistFilters>
+        ).map((key) => [key, viewFilterString(savedView.view.filters[key])]),
+      ) as unknown as WatchlistFilters,
+    [savedView.view.filters],
+  );
+  const sorting = savedView.view.sorting[0] ?? {
+    id: "system",
+    desc: false,
+  };
+  const onViewChange = (change: WatchlistViewChange) =>
+    savedView.setView((current) => ({
+      ...current,
+      filters: {
+        ...current.filters,
+        ...(change.filters
+          ? Object.fromEntries(
+              Object.entries(change.filters).map(([key, value]) => [
+                key,
+                value,
+              ]),
+            )
+          : {}),
+        ...(change.protectedFactionId !== undefined
+          ? {
+              protectedFactionId:
+                change.protectedFactionId === null
+                  ? ""
+                  : String(change.protectedFactionId),
+            }
+          : {}),
+      },
+      sorting: [
+        {
+          id: change.sortField ?? current.sorting[0]?.id ?? "system",
+          desc: change.sortDescending ?? current.sorting[0]?.desc ?? false,
+        },
+      ],
+    }));
+  const changeScope = (next: WatchlistScope) => {
+    savedView.setView((current) => ({
+      ...current,
+      variant: next,
+      filters: {},
+      sorting: [{ id: "system", desc: false }],
+    }));
+    setViewGeneration((value) => value + 1);
+  };
+  const commonViewProps: WatchlistViewProps = {
+    viewFilters: filters,
+    viewSortField: sorting.id,
+    viewSortDescending: sorting.desc,
+    viewProtectedFactionId:
+      Number(viewFilterString(savedView.view.filters.protectedFactionId)) ||
+      null,
+    onViewChange,
+  };
   return (
     <>
-      <nav
-        className="surface watchlist-scope-tabs"
-        role="tablist"
-        aria-label="BGS watchlist scope"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={scope === "personal"}
-          onClick={() => setScope("personal")}
+      <PageViewRegistration
+        controller={{
+          reset: () => {
+            savedView.reset();
+            setViewGeneration((value) => value + 1);
+          },
+          refresh: () =>
+            queryClient.invalidateQueries({
+              predicate: (query) =>
+                String(query.queryKey[0]).startsWith("system-watchlist"),
+            }),
+        }}
+      />
+      <div className="watchlist-view-bar">
+        <nav
+          className="surface watchlist-scope-tabs"
+          role="tablist"
+          aria-label="BGS watchlist scope"
         >
-          Personal watchlist
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={scope === "global"}
-          onClick={() => setScope("global")}
-        >
-          Global watchlist
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={scope === "protected"}
-          onClick={() => setScope("protected")}
-        >
-          Protected factions watchlist
-        </button>
-      </nav>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={scope === "personal"}
+            onClick={() => changeScope("personal")}
+          >
+            Personal watchlist
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={scope === "global"}
+            onClick={() => changeScope("global")}
+          >
+            Global watchlist
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={scope === "protected"}
+            onClick={() => changeScope("protected")}
+          >
+            Protected factions watchlist
+          </button>
+        </nav>
+        <SavedViewsControl
+          model={savedView}
+          onViewApplied={() => setViewGeneration((value) => value + 1)}
+        />
+      </div>
       <div hidden={scope !== "personal"} role="tabpanel">
         <PersonalSystemWatchlist
+          key={`personal-${viewGeneration}`}
           active={scope === "personal"}
           tenantFactionName={tenantFactionName}
           canManageTenantRules={canManageTenantRules}
           canRunBgsAi={canRunBgsAi}
+          {...commonViewProps}
         />
       </div>
       <div hidden={scope !== "global"} role="tabpanel">
         <GlobalSystemWatchlist
+          key={`global-${viewGeneration}`}
           active={scope === "global"}
           tenantFactionName={tenantFactionName}
           canManageTenantRules={canManageTenantRules}
           canRunBgsAi={canRunBgsAi}
+          {...commonViewProps}
         />
       </div>
       <div hidden={scope !== "protected"} role="tabpanel">
         <ProtectedFactionsSystemWatchlist
+          key={`protected-${viewGeneration}`}
           active={scope === "protected"}
           tenantFactionName={tenantFactionName}
           canManageTenantRules={canManageTenantRules}
           canRunBgsAi={canRunBgsAi}
+          {...commonViewProps}
         />
       </div>
     </>

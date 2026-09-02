@@ -572,7 +572,12 @@ paths:
       security: [{ dashboardBearer: [] }]
       x-capability: rules:write
       responses:
-        "200": { description: Masked webhook configuration status }
+        "200":
+          description: Personal webhook configuration and decrypted URL for the authenticated user
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/PersonalDiscordWebhookStatus" }
         default: { $ref: "#/components/responses/ErrorResponse" }
     put:
       operationId: setPersonalDiscordWebhook
@@ -588,14 +593,24 @@ paths:
               properties:
                 { webhook_url: { type: string, format: uri, maxLength: 2048 } }
       responses:
-        "200": { description: Webhook encrypted and saved }
+        "200":
+          description: Webhook encrypted and saved
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/PersonalDiscordWebhookStatus" }
         default: { $ref: "#/components/responses/ErrorResponse" }
     delete:
       operationId: deletePersonalDiscordWebhook
       security: [{ dashboardBearer: [] }]
       x-capability: rules:write
       responses:
-        "200": { description: Webhook removed }
+        "200":
+          description: Webhook removed
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/PersonalDiscordWebhookStatus" }
         default: { $ref: "#/components/responses/ErrorResponse" }
   /account/discord-webhook/test:
     post:
@@ -1020,6 +1035,18 @@ components:
         schema: { type: string, enum: [asc, desc], default: asc },
       }
   schemas:
+    PersonalDiscordWebhookStatus:
+      type: object
+      required: [configured, webhook_url, updated_at, encryption_configured]
+      properties:
+        ok: { type: boolean }
+        configured: { type: boolean }
+        webhook_url:
+          type: [string, "null"]
+          format: uri
+          description: Decrypted personal webhook URL, visible only to its authenticated owner
+        updated_at: { type: [string, "null"], format: date-time }
+        encryption_configured: { type: boolean }
     DashboardRole: { type: string, enum: [member, leadership, admin] }
     DashboardUser:
       type: object

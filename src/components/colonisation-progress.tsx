@@ -25,8 +25,10 @@ import {
   colonisationCommodityGroups,
   colonisationCommodityNames,
   colonisationConstructionStatus,
+  colonisationTotals,
   contributionCommodityNames,
   type ColonisationConstruction,
+  type ColonisationCommodityConstructionGroup,
   type ColonisationContributionCommodity,
   type ColonisationContributionGroup,
   type ColonisationContributionRecord,
@@ -196,6 +198,12 @@ export function colonisationCommodityGroupKey(
   return `${constructionId}\u0000${commodityKey}`;
 }
 
+export function colonisationCommodityConstructionGroupKey(
+  commodityKey: string,
+) {
+  return `commodity-constructions\u0000${commodityKey}`;
+}
+
 export function colonisationContributionCommanderGroupKey(groupId: string) {
   return `contribution\u0000${groupId}`;
 }
@@ -245,6 +253,66 @@ function progressLabelSeries(
 
 function NumberCell({ children }: { children: ReactNode }) {
   return <td className="colonisation-number">{children}</td>;
+}
+
+interface TotalsProps {
+  groups: { need?: number; delivered: number; diff?: number }[];
+  showNeedDiff?: boolean;
+  labelColSpan?: number;
+}
+
+function ColonisationTotalsRow({
+  groups,
+  showNeedDiff = false,
+  labelColSpan = 1,
+}: TotalsProps) {
+  const totals = colonisationTotals(groups);
+  return (
+    <tbody className="colonisation-totals">
+      <tr>
+        <th scope="row" colSpan={labelColSpan}>
+          Total · {groups.length} {groups.length === 1 ? "group" : "groups"}
+        </th>
+        {showNeedDiff && <NumberCell>{formatValue(totals.need)}</NumberCell>}
+        <NumberCell>{formatValue(totals.delivered)}</NumberCell>
+        {showNeedDiff && <NumberCell>{formatValue(totals.diff)}</NumberCell>}
+      </tr>
+    </tbody>
+  );
+}
+
+function ColonisationMobileTotals({
+  groups,
+  showNeedDiff = false,
+}: TotalsProps) {
+  const totals = colonisationTotals(groups);
+  return (
+    <article className="colonisation-totals">
+      <header>
+        <strong>
+          Total · {groups.length} {groups.length === 1 ? "group" : "groups"}
+        </strong>
+        <dl className={showNeedDiff ? undefined : "single-value"}>
+          {showNeedDiff && (
+            <div>
+              <dt>Need</dt>
+              <dd>{formatValue(totals.need)}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Delivered</dt>
+            <dd>{formatValue(totals.delivered)}</dd>
+          </div>
+          {showNeedDiff && (
+            <div>
+              <dt>Diff</dt>
+              <dd>{formatValue(totals.diff)}</dd>
+            </div>
+          )}
+        </dl>
+      </header>
+    </article>
+  );
 }
 
 export type SortDirection = "asc" | "desc";
@@ -886,6 +954,7 @@ export function ColonisationContributionsTable({
               />
             </tr>
           </thead>
+          <ColonisationTotalsRow groups={groups} />
           {sortedGroups.map((group) => {
             const commanderCollapsed = collapsedCommanderIds.has(
               colonisationContributionCommanderGroupKey(group.id),
@@ -995,6 +1064,7 @@ export function ColonisationContributionsTable({
         </table>
       </div>
       <div className="colonisation-mobile-groups contribution-mobile-groups">
+        <ColonisationMobileTotals groups={groups} />
         {sortedGroups.map((group) => {
           const commanderCollapsed = collapsedCommanderIds.has(
             colonisationContributionCommanderGroupKey(group.id),
@@ -1262,6 +1332,7 @@ export function ColonisationContributionRecordsTable({
               ))}
             </tr>
           </thead>
+          <ColonisationTotalsRow groups={groups} labelColSpan={4} />
           {sortedGroups.map((construction) => {
             const constructionCollapsed = collapsedConstructionIds.has(
               construction.id,
@@ -1423,6 +1494,7 @@ export function ColonisationContributionRecordsTable({
         </table>
       </div>
       <div className="colonisation-mobile-groups contribution-record-mobile-groups">
+        <ColonisationMobileTotals groups={groups} />
         {sortedGroups.map((construction) => {
           const constructionCollapsed = collapsedConstructionIds.has(
             construction.id,
@@ -1639,6 +1711,7 @@ export function ColonisationGroupedTable({
               ))}
             </tr>
           </thead>
+          <ColonisationTotalsRow groups={constructions} showNeedDiff />
           {sortedConstructions.map((construction) => {
             const groups = sortedCommanderGroups(construction);
             const constructionCollapsed = collapsedConstructionIds.has(
@@ -1760,6 +1833,7 @@ export function ColonisationGroupedTable({
         </table>
       </div>
       <div className="colonisation-mobile-groups">
+        <ColonisationMobileTotals groups={constructions} showNeedDiff />
         {sortedConstructions.map((construction) => {
           const constructionCollapsed = collapsedConstructionIds.has(
             construction.id,
@@ -1892,6 +1966,258 @@ export function ColonisationGroupedTable({
   );
 }
 
+export function ColonisationCommodityConstructionsTable({
+  groups,
+  sort,
+  onSort,
+  collapsedCommodityIds,
+  onToggleCommodity,
+}: {
+  groups: ColonisationCommodityConstructionGroup[];
+  sort: ColonisationSort;
+  onSort: (key: ColonisationSortKey) => void;
+  collapsedCommodityIds: ReadonlySet<string>;
+  onToggleCommodity: (commodityKey: string) => void;
+}) {
+  const numericKeys = ["need", "delivered", "diff"];
+  const sortedGroups = sortedBy(
+    groups,
+    (group) =>
+      numericKeys.includes(sort.key)
+        ? group[sort.key as "need" | "delivered" | "diff"]
+        : group.commodity,
+    ["commodity", ...numericKeys].includes(sort.key) ? sort.direction : "asc",
+  );
+  const sortedConstructions = (group: ColonisationCommodityConstructionGroup) =>
+    sortedBy(
+      group.constructions,
+      ({ construction, commodity }) =>
+        sort.key === "system"
+          ? construction.system
+          : sort.key === "status"
+            ? colonisationConstructionStatus(construction.status)
+            : numericKeys.includes(sort.key)
+              ? commodity[sort.key as "need" | "delivered" | "diff"]
+              : construction.construction,
+      ["construction", "system", "status", ...numericKeys].includes(sort.key)
+        ? sort.direction
+        : "asc",
+    );
+
+  return (
+    <>
+      <div className="desktop-table colonisation-grouped-table commodity-constructions-table">
+        <table>
+          <thead>
+            <tr>
+              {(
+                [
+                  ["commodity", "Commodity / Construction"],
+                  ["need", "Need"],
+                  ["delivered", "Delivered"],
+                  ["diff", "Diff"],
+                ] as const
+              ).map(([key, label]) => (
+                <SortHeader
+                  key={key}
+                  label={label}
+                  sortKey={key}
+                  activeKey={sort.key}
+                  direction={sort.direction}
+                  onSort={onSort}
+                />
+              ))}
+            </tr>
+          </thead>
+          <ColonisationTotalsRow groups={groups} showNeedDiff />
+          {sortedGroups.map((group) => {
+            const collapsed = collapsedCommodityIds.has(
+              colonisationCommodityConstructionGroupKey(group.key),
+            );
+            return (
+              <tbody key={group.key}>
+                <tr className={`commodity-group-row ${diffClass(group.diff)}`}>
+                  <th scope="rowgroup">
+                    <button
+                      type="button"
+                      className="colonisation-group-toggle"
+                      aria-expanded={!collapsed}
+                      aria-label={`${collapsed ? "Expand" : "Collapse"} commodity ${group.commodity}`}
+                      onClick={() => onToggleCommodity(group.key)}
+                    >
+                      {collapsed ? (
+                        <ChevronRight size={14} aria-hidden="true" />
+                      ) : (
+                        <ChevronDown size={14} aria-hidden="true" />
+                      )}
+                      <span className="colonisation-group-label">
+                        <CommodityName
+                          name={group.commodity}
+                          colour="currentColor"
+                          showColourChip={false}
+                        />
+                        <small>
+                          {group.constructions.length}{" "}
+                          {group.constructions.length === 1
+                            ? "construction"
+                            : "constructions"}
+                        </small>
+                      </span>
+                    </button>
+                  </th>
+                  <NumberCell>{formatValue(group.need)}</NumberCell>
+                  <NumberCell>{formatValue(group.delivered)}</NumberCell>
+                  <NumberCell>{formatValue(group.diff)}</NumberCell>
+                </tr>
+                {!collapsed &&
+                  sortedConstructions(group).map(
+                    ({ construction, commodity }) => (
+                      <tr
+                        key={construction.id}
+                        className={`commodity-construction-row ${diffClass(commodity.diff)}`}
+                      >
+                        <th scope="row">
+                          <span
+                            className={`contribution-construction-identity ${diffClass(construction.diff)}`}
+                          >
+                            <ConstructionCompletionIndicator
+                              complete={constructionIsComplete(construction)}
+                            />
+                            <span className="colonisation-group-label">
+                              <CopyableValue
+                                value={construction.construction}
+                                label="Copy construction name"
+                              />
+                              <small>
+                                <CopyableValue
+                                  value={construction.system}
+                                  label="Copy system name"
+                                />
+                                <span> · {construction.status}</span>
+                              </small>
+                            </span>
+                          </span>
+                        </th>
+                        <NumberCell>{formatValue(commodity.need)}</NumberCell>
+                        <NumberCell>
+                          {formatValue(commodity.delivered)}
+                        </NumberCell>
+                        <NumberCell>{formatValue(commodity.diff)}</NumberCell>
+                      </tr>
+                    ),
+                  )}
+              </tbody>
+            );
+          })}
+        </table>
+      </div>
+      <div className="colonisation-mobile-groups commodity-constructions-mobile-groups">
+        <ColonisationMobileTotals groups={groups} showNeedDiff />
+        {sortedGroups.map((group) => {
+          const collapsed = collapsedCommodityIds.has(
+            colonisationCommodityConstructionGroupKey(group.key),
+          );
+          return (
+            <article key={group.key}>
+              <header className={diffClass(group.diff)}>
+                <button
+                  type="button"
+                  className="mobile-construction-toggle"
+                  aria-expanded={!collapsed}
+                  aria-label={`${collapsed ? "Expand" : "Collapse"} commodity ${group.commodity}`}
+                  onClick={() => onToggleCommodity(group.key)}
+                >
+                  <div>
+                    <strong className="mobile-group-title">
+                      {collapsed ? (
+                        <ChevronRight size={14} aria-hidden="true" />
+                      ) : (
+                        <ChevronDown size={14} aria-hidden="true" />
+                      )}
+                      <CommodityName
+                        name={group.commodity}
+                        colour="currentColor"
+                        showColourChip={false}
+                      />
+                    </strong>
+                    <span>
+                      {group.constructions.length}{" "}
+                      {group.constructions.length === 1
+                        ? "construction"
+                        : "constructions"}
+                    </span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Need</dt>
+                      <dd>{formatValue(group.need)}</dd>
+                    </div>
+                    <div>
+                      <dt>Delivered</dt>
+                      <dd>{formatValue(group.delivered)}</dd>
+                    </div>
+                    <div>
+                      <dt>Diff</dt>
+                      <dd>{formatValue(group.diff)}</dd>
+                    </div>
+                  </dl>
+                </button>
+              </header>
+              {!collapsed &&
+                sortedConstructions(group).map(
+                  ({ construction, commodity }) => (
+                    <section key={construction.id}>
+                      <div
+                        className={`mobile-commodity-row ${diffClass(commodity.diff)}`}
+                      >
+                        <span
+                          className={`contribution-construction-identity ${diffClass(construction.diff)}`}
+                        >
+                          <ConstructionCompletionIndicator
+                            complete={constructionIsComplete(construction)}
+                          />
+                          <span className="colonisation-group-label">
+                            <strong>
+                              <CopyableValue
+                                value={construction.construction}
+                                label="Copy construction name"
+                              />
+                            </strong>
+                            <small>
+                              <CopyableValue
+                                value={construction.system}
+                                label="Copy system name"
+                              />
+                              <span> · {construction.status}</span>
+                            </small>
+                          </span>
+                        </span>
+                        <dl>
+                          <div>
+                            <dt>Need</dt>
+                            <dd>{formatValue(commodity.need)}</dd>
+                          </div>
+                          <div>
+                            <dt>Delivered</dt>
+                            <dd>{formatValue(commodity.delivered)}</dd>
+                          </div>
+                          <div>
+                            <dt>Diff</dt>
+                            <dd>{formatValue(commodity.diff)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </section>
+                  ),
+                )}
+            </article>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 export function ColonisationCommodityGroupedTable({
   constructions,
   sort,
@@ -1996,6 +2322,7 @@ export function ColonisationCommodityGroupedTable({
               ))}
             </tr>
           </thead>
+          <ColonisationTotalsRow groups={constructions} showNeedDiff />
           {sortedConstructions.map((construction) => {
             const groups = sortedCommodityGroups(construction);
             const constructionCollapsed = collapsedConstructionIds.has(
@@ -2119,6 +2446,7 @@ export function ColonisationCommodityGroupedTable({
         </table>
       </div>
       <div className="colonisation-mobile-groups">
+        <ColonisationMobileTotals groups={constructions} showNeedDiff />
         {sortedConstructions.map((construction) => {
           const constructionCollapsed = collapsedConstructionIds.has(
             construction.id,

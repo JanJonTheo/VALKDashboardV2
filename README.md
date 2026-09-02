@@ -2,6 +2,8 @@
 
 Responsive Next.js command dashboard for the existing multi-tenant VALK Flask API. It replaces the Streamlit user interface in a controlled parallel rollout; `VALKDiscordBot` remains an independent, unchanged Discord channel.
 
+See [CHANGELOG.md](CHANGELOG.md) for the complete change history since the initial commit, including the latest deployed changes.
+
 ## Included
 
 - Next.js 16 App Router, React 19, strict TypeScript and Tailwind CSS 4
