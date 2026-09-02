@@ -52,6 +52,7 @@ import {
   type ColonisationContributionRecord,
   type ColonisationFilterValues,
 } from "@/lib/colonisation";
+import type { EvaluationHistoryPayload } from "@/lib/evaluation-history";
 import {
   periodOptions,
   type FeatureFilter,
@@ -59,6 +60,7 @@ import {
 } from "@/lib/features";
 import {
   leaderboardMetricOptions,
+  type EvaluationChartMode,
   type LeaderboardMetric,
   type ViewFilterValue,
   type ViewPreference,
@@ -67,7 +69,7 @@ import {
 } from "@/lib/preferences";
 import { useViewPreference } from "@/lib/use-view-preference";
 import { formatValue } from "@/lib/utils";
-import { FeatureChart } from "./chart";
+import { EvaluationChart, FeatureChart } from "./chart";
 import { CopyTextButton } from "./copy-text-button";
 import { DataExplorer } from "./data-explorer";
 import { PageViewRegistration } from "./page-view-context";
@@ -123,6 +125,21 @@ async function getFeature(key: string, params: string): Promise<Payload> {
     throw new Error(
       (await response.json().catch(() => null))?.error?.message ??
         "Dashboard data is unavailable",
+    );
+  }
+  return response.json();
+}
+
+async function getEvaluationHistory(
+  params: string,
+): Promise<EvaluationHistoryPayload> {
+  const response = await fetch(`/api/bff/evaluations/history?${params}`, {
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.json().catch(() => null))?.error?.message ??
+        "Evaluation history is unavailable",
     );
   }
   return response.json();
@@ -278,6 +295,10 @@ export function FeatureDashboard({
   const [collapsedCommodityIds, setCollapsedCommodityIds] =
     useState<Set<string> | null>(null);
   const effectiveParams = new URLSearchParams(savedView.effectiveParams);
+  if (spec.key === "evaluations") {
+    effectiveParams.delete("metric");
+    effectiveParams.delete("chart");
+  }
   if (spec.key === "colonisation")
     for (const key of [
       "view",
@@ -306,6 +327,35 @@ export function FeatureDashboard({
     refetchIntervalInBackground: false,
     enabled: canLoad && spec.key !== "data-explorer",
   });
+  const selectedMetric =
+    leaderboardMetricOptions.find(
+      (option) => option.value === savedView.view.metric,
+    ) ?? leaderboardMetricOptions[0];
+  const evaluationChartMode: EvaluationChartMode =
+    savedView.view.chartMode === "history" ? "history" : "totals";
+  const evaluationHistoryParams = new URLSearchParams({
+    period: savedView.view.period ?? "all",
+    metric: selectedMetric.value,
+    mode: savedView.view.variant === "top5" ? "top5" : "full",
+  });
+  for (const key of ["from_date", "to_date", "from_month", "to_month"]) {
+    const value = viewFilterString(savedView.view.filters[key]);
+    if (value) evaluationHistoryParams.set(key, value);
+  }
+  const commanderFilter = viewFilterString(savedView.view.filters.commander);
+  if (commanderFilter)
+    evaluationHistoryParams.set("commander", commanderFilter);
+  const evaluationHistoryQuery = useQuery({
+    queryKey: [
+      "feature",
+      "evaluations-history",
+      evaluationHistoryParams.toString(),
+    ],
+    queryFn: () => getEvaluationHistory(evaluationHistoryParams.toString()),
+    refetchInterval: spec.key === "evaluations" ? spec.refreshMs : false,
+    refetchIntervalInBackground: false,
+    enabled: spec.key === "evaluations" && evaluationChartMode === "history",
+  });
 
   useEffect(() => {
     const listener = () =>
@@ -315,7 +365,7 @@ export function FeatureDashboard({
   }, [queryClient, spec.key]);
 
   const effectiveSpec = useMemo<FeatureSpec>(() => {
-    if (spec.key === "leaderboard") {
+    if (["leaderboard", "evaluations"].includes(spec.key)) {
       const metric =
         leaderboardMetricOptions.find(
           (option) => option.value === savedView.view.metric,
@@ -358,7 +408,7 @@ export function FeatureDashboard({
     };
   }, [queryState.data?.meta?.months, savedView.view.metric, spec]);
 
-  const rows = useMemo(() => {
+  const filteredRows = useMemo(() => {
     let all = queryState.data?.data ?? [];
     for (const filter of spec.filters) {
       if (!filter.field) continue;
@@ -374,11 +424,6 @@ export function FeatureDashboard({
         ),
       );
     }
-    if (spec.key === "evaluations" && savedView.view.variant === "top5") {
-      all = [...all]
-        .sort((a, b) => Number(b.missions ?? 0) - Number(a.missions ?? 0))
-        .slice(0, 5);
-    }
     if (!query.trim()) return all;
     const needle = query.toLowerCase();
     return all.filter((row) =>
@@ -386,14 +431,16 @@ export function FeatureDashboard({
         String(value).toLowerCase().includes(needle),
       ),
     );
-  }, [
-    queryState.data,
-    query,
-    savedView.view.filters,
-    savedView.view.variant,
-    spec.filters,
-    spec.key,
-  ]);
+  }, [queryState.data, query, savedView.view.filters, spec.filters]);
+  const rows = useMemo(
+    () =>
+      spec.key === "evaluations" && savedView.view.variant === "top5"
+        ? [...filteredRows]
+            .sort((a, b) => Number(b.missions ?? 0) - Number(a.missions ?? 0))
+            .slice(0, 5)
+        : filteredRows,
+    [filteredRows, savedView.view.variant, spec.key],
+  );
   const isColonisationView = spec.key === "colonisation";
   const requestedColonisationVariant =
     searchParams.get("view") ?? savedView.view.variant;
@@ -795,6 +842,8 @@ export function FeatureDashboard({
     if (view.search) next.set("q", view.search);
     if (view.period) next.set("period", view.period);
     if (view.metric) next.set("metric", view.metric);
+    if (spec.key === "evaluations" && view.chartMode)
+      next.set("chart", view.chartMode);
     for (const filter of spec.filters) {
       if (filter.key === "period") continue;
       for (const value of viewFilterValues(view.filters[filter.key]))
@@ -922,10 +971,14 @@ export function FeatureDashboard({
           />
         }
       />
-      {spec.key === "leaderboard" && (
+      {["leaderboard", "evaluations"].includes(spec.key) && (
         <LeaderboardControls
-          period={savedView.view.period ?? "cm"}
+          label={spec.title}
+          period={
+            savedView.view.period ?? (spec.key === "leaderboard" ? "cm" : "all")
+          }
           metric={savedView.view.metric ?? "missions"}
+          metricControlsSorting={spec.key === "leaderboard"}
           filters={savedView.view.filters}
           onChange={(change) => {
             savedView.setView((current) => ({
@@ -1032,7 +1085,9 @@ export function FeatureDashboard({
           ? constructions.length > 0
           : isContributionView
             ? contributionGroups.length > 0
-            : rows.length > 0) && (
+            : spec.key === "evaluations" && evaluationChartMode === "history"
+              ? true
+              : rows.length > 0) && (
           <section className="surface chart-surface">
             <div className="section-heading">
               <div>
@@ -1044,12 +1099,56 @@ export function FeatureDashboard({
                       : "Construction commodity progress"
                     : isContributionView
                       ? "Commander commodity contributions"
-                      : effectiveSpec.chart.title}
+                      : spec.key === "evaluations"
+                        ? evaluationChartMode === "history"
+                          ? `${selectedMetric.label} historical trend`
+                          : `${selectedMetric.label} totals by commander`
+                        : effectiveSpec.chart.title}
                 </h2>
               </div>
-              <span className="table-alternative">
-                The data table below is the accessible chart alternative.
-              </span>
+              {spec.key === "evaluations" ? (
+                <div className="chart-heading-actions">
+                  <div
+                    className="variant-tabs compact-tabs"
+                    aria-label="Visual analysis type"
+                  >
+                    {(
+                      [
+                        ["totals", "Totals"],
+                        ["history", "Historical trend"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        className={
+                          evaluationChartMode === value ? "active" : ""
+                        }
+                        key={value}
+                        onClick={() => {
+                          savedView.setView((current) => ({
+                            ...current,
+                            chartMode: value,
+                          }));
+                          const next = new URLSearchParams(
+                            searchParams.toString(),
+                          );
+                          next.set("chart", value);
+                          replaceParams(next);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="table-alternative">
+                    Top {savedView.view.variant === "top5" ? 5 : 10} · Metric
+                    does not filter the detail table.
+                  </span>
+                </div>
+              ) : (
+                <span className="table-alternative">
+                  The data table below is the accessible chart alternative.
+                </span>
+              )}
             </div>
             {isConstructionView ? (
               isConstructionCommanderView ? (
@@ -1064,6 +1163,21 @@ export function FeatureDashboard({
             ) : isContributionView ? (
               <ColonisationContributionsChart
                 groups={visualContributionGroups}
+              />
+            ) : spec.key === "evaluations" ? (
+              <EvaluationChart
+                mode={evaluationChartMode}
+                rows={filteredRows}
+                metric={selectedMetric.value}
+                metricLabel={selectedMetric.label}
+                limit={savedView.view.variant === "top5" ? 5 : 10}
+                history={evaluationHistoryQuery.data}
+                loading={evaluationHistoryQuery.isLoading}
+                error={
+                  evaluationHistoryQuery.isError
+                    ? evaluationHistoryQuery.error.message
+                    : undefined
+                }
               />
             ) : (
               <FeatureChart spec={effectiveSpec} rows={rows} />
@@ -1471,14 +1585,18 @@ export function FeatureDashboard({
 }
 
 function LeaderboardControls({
+  label,
   period,
   metric,
+  metricControlsSorting,
   filters,
   onChange,
   onReset,
 }: {
+  label: string;
   period: string;
   metric: LeaderboardMetric;
+  metricControlsSorting: boolean;
   filters: ViewPreference["filters"];
   onChange: (change: Partial<ViewPreference>) => void;
   onReset: () => void | Promise<void>;
@@ -1488,7 +1606,7 @@ function LeaderboardControls({
   return (
     <section
       className="surface leaderboard-controls"
-      aria-label="Leaderboard view settings"
+      aria-label={`${label} view settings`}
     >
       <div className="leaderboard-control-grid">
         <label>
@@ -1508,12 +1626,15 @@ function LeaderboardControls({
           <span>Metric</span>
           <select
             value={metric}
-            onChange={(event) =>
+            onChange={(event) => {
+              const nextMetric = event.target.value as LeaderboardMetric;
               onChange({
-                metric: event.target.value as LeaderboardMetric,
-                sorting: [{ id: event.target.value, desc: true }],
-              })
-            }
+                metric: nextMetric,
+                ...(metricControlsSorting
+                  ? { sorting: [{ id: nextMetric, desc: true }] }
+                  : {}),
+              });
+            }}
           >
             {leaderboardMetricOptions.map((option) => (
               <option key={option.value} value={option.value}>

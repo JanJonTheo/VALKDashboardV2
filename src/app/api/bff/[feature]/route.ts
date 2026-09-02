@@ -56,7 +56,7 @@ function upstreamRequest(request: Request, spec: FeatureSpec) {
     if (value) upstream.searchParams.set(filter.param, value);
   }
 
-  if (spec.key === "leaderboard") {
+  if (["leaderboard", "evaluations"].includes(spec.key)) {
     const fromMonth = incoming.searchParams.get("from_month");
     const toMonth = incoming.searchParams.get("to_month");
     if (fromMonth && /^\d{4}-\d{2}$/.test(fromMonth))

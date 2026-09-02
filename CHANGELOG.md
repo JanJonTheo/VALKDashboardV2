@@ -11,6 +11,25 @@ Die Historie beginnt mit `c11adc9` vom 29.08.2026 und umfasst alle zehn bisher v
 - Dieses Changelog mit der vollständigen bisherigen Änderungshistorie hinzugefügt.
 - Changelog in der README verlinkt.
 
+## 03.09.2026 – Perioden- und Kennzahlenanalyse für Evaluations
+
+Status: am 03.09.2026 um 01:27 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260903-012139-evaluation-period-metrics`.
+
+### Hinzugefügt
+
+- Perioden- und Kennzahlauswahl in Evaluations entsprechend dem Leaderboard ergänzt, einschließlich eigener Datums- und Monatsbereiche.
+- Visual Analysis kann zwischen Summen als Balkendiagramm und historischem Verlauf als Liniendiagramm wechseln.
+- Historische UTC-Zeitfenster für Tag, Woche, Monat, Jahr, die letzten zwölf Monate sowie Current Tick und Last Tick ergänzt.
+- Eigene, mandantenfähige History-API mit den zwölf Leaderboard-Kennzahlen, Top 10 in der vollständigen Ansicht und Top 5 in der kompakten Ansicht ergänzt.
+
+### Geändert und geprüft
+
+- Die Evaluations-Detailtabelle folgt der gewählten Periode, bleibt aber unabhängig von der ausgewählten Kennzahl.
+- Preference-Schema auf Version 4 erweitert; Diagrammtyp, Periode und Kennzahl werden in URL und gespeicherten Views berücksichtigt.
+- Produktionsbuild, 141 Unit-Tests und der Evaluations-Browser-Test auf Desktop, Tablet und Smartphone erfolgreich ausgeführt.
+- Das neue Linux-Release vor der Umschaltung separat gebaut und intern geprüft; anschließend Health-, HTTPS-, Authentifizierungs-, Datenparitäts- und Evaluations-History-Smoke-Tests erfolgreich ausgeführt.
+- Alte serverseitige Dashboard-Releases, Datenbank- und Deployment-Sicherungen sowie Staging-Reste nach erfolgreicher Produktivprüfung entfernt.
+
 ## 30.08.2026 – Einheitliches Aktualisieren und persönliche Views
 
 Status: am 30.08.2026 um 23:20 MESZ auf [valk-elite.de](https://valk-elite.de) deployt; zum Zeitpunkt der Changelog-Erstellung noch ohne eigenen Git-Commit. Grundlage ist `5bf927f` plus die Änderungen im Arbeitsverzeichnis. Release-Kennung: `20260830-saved-views-225358`.

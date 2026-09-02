@@ -18,6 +18,20 @@ describe("dashboard view preferences", () => {
     expect(preference.sorting).toEqual([{ id: "missions", desc: true }]);
   });
 
+  it("uses period and metric controls without coupling evaluation details to metric changes", () => {
+    const preference = defaultViewPreference("evaluations", [
+      "cmdr",
+      "missions",
+    ]);
+    expect(preference).toMatchObject({
+      period: "all",
+      metric: "missions",
+      chartMode: "totals",
+      variant: "full",
+      sorting: [{ id: "missions", desc: true }],
+    });
+  });
+
   it("accepts every supported leaderboard metric", () => {
     expect(leaderboardMetricOptions).toHaveLength(12);
     for (const metric of leaderboardMetricOptions) {

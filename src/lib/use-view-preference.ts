@@ -355,10 +355,20 @@ export function useViewPreference(
       if (searchParams.has("q")) next.search = searchParams.get("q") ?? "";
       if (searchParams.has("period"))
         next.period = searchParams.get("period") || defaults.period;
-      if (spec.key === "leaderboard" && searchParams.has("metric")) {
+      if (
+        ["leaderboard", "evaluations"].includes(spec.key) &&
+        searchParams.has("metric")
+      ) {
         const metric = searchParams.get("metric");
         const parsed = viewPreferenceForMetric(next, metric);
         if (parsed) next.metric = parsed;
+      }
+      if (spec.key === "evaluations" && searchParams.has("chart")) {
+        const parsed = viewPreferenceSchema.safeParse({
+          ...next,
+          chartMode: searchParams.get("chart"),
+        });
+        if (parsed.success) next.chartMode = parsed.data.chartMode;
       }
       for (const filter of spec.filters) {
         if (filter.key === "period") continue;
@@ -386,6 +396,8 @@ export function useViewPreference(
     else params.delete("q");
     if (stored.view.period) params.set("period", stored.view.period);
     if (stored.view.metric) params.set("metric", stored.view.metric);
+    if (spec.key === "evaluations" && stored.view.chartMode)
+      params.set("chart", stored.view.chartMode);
     for (const filter of spec.filters) {
       if (filter.key === "period") continue;
       const values = viewFilterValues(stored.view.filters[filter.key]);

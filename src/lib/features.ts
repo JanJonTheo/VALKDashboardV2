@@ -177,7 +177,33 @@ export const features: FeatureSpec[] = [
     endpoint: "summary/leaderboard",
     refreshMs: 5 * min,
     filters: [
-      periodFilter(),
+      { ...periodFilter(), placement: "page" },
+      {
+        key: "from_date",
+        label: "From date",
+        type: "date",
+        param: "from_date",
+        placement: "page",
+      },
+      {
+        key: "to_date",
+        label: "To date",
+        type: "date",
+        param: "to_date",
+        placement: "page",
+      },
+      {
+        key: "from_month",
+        label: "From month",
+        type: "month",
+        placement: "page",
+      },
+      {
+        key: "to_month",
+        label: "To month",
+        type: "month",
+        placement: "page",
+      },
       {
         key: "commander",
         label: "Commander",

@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { flaskRequest } from "@/lib/flask";
+import { getLastGalaxyTick } from "@/lib/galaxy-tick";
 import { summarizeHomeLeaderboard } from "@/lib/home";
 import { normalizeFeaturePayload } from "@/lib/normalize";
 import { AccessError, requireDashboardSession } from "@/lib/session";
 
 type Row = Record<string, unknown>;
-
-const GALAXY_TICK_URL =
-  process.env.GALAXY_TICK_URL ?? "http://tick.infomancer.uk/galtick.json";
 
 function requestWithQuery(request: Request, query: Record<string, string>) {
   const url = new URL(request.url);
@@ -20,24 +18,6 @@ async function rows(response: Response): Promise<Row[]> {
     throw new Error(`Tenant API returned HTTP ${response.status}`);
   const body = (await response.json()) as { data?: unknown };
   return Array.isArray(body.data) ? (body.data as Row[]) : [];
-}
-
-async function getLastGalaxyTick() {
-  try {
-    const response = await fetch(GALAXY_TICK_URL, {
-      next: { revalidate: 300 },
-      signal: AbortSignal.timeout(2_500),
-    });
-    if (!response.ok) return null;
-
-    const body = (await response.json()) as { lastGalaxyTick?: unknown };
-    if (typeof body.lastGalaxyTick !== "string") return null;
-
-    const lastTick = body.lastGalaxyTick.trim();
-    return lastTick && Number.isFinite(Date.parse(lastTick)) ? lastTick : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function GET(request: Request) {

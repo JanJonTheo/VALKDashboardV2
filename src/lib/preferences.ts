@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const preferenceSchemaVersion = 3;
+export const preferenceSchemaVersion = 4;
 export const maximumSavedViews = 20;
 
 export const leaderboardMetricOptions = [
@@ -21,6 +21,9 @@ export const leaderboardMetricOptions = [
 export type LeaderboardMetric =
   (typeof leaderboardMetricOptions)[number]["value"];
 
+export const evaluationChartModes = ["totals", "history"] as const;
+export type EvaluationChartMode = (typeof evaluationChartModes)[number];
+
 const sortingEntry = z.object({
   id: z.string().min(1).max(96),
   desc: z.boolean(),
@@ -37,6 +40,7 @@ export const viewPreferenceSchema = z.object({
   metric: z
     .enum(leaderboardMetricOptions.map((option) => option.value))
     .optional(),
+  chartMode: z.enum(evaluationChartModes).optional(),
   filters: z.record(z.string(), viewFilterValueSchema).default({}),
   variant: z.string().max(64).optional(),
   sorting: z.array(sortingEntry).max(8).default([]),
@@ -108,6 +112,18 @@ export function defaultViewPreference(
       metric: "missions",
       filters: {},
       variant: undefined,
+      sorting: [{ id: "missions", desc: true }],
+      visibleColumns: [...columnKeys],
+      pageSize: 25,
+    };
+  }
+  if (viewKey === "evaluations") {
+    return {
+      period: "all",
+      metric: "missions",
+      chartMode: "totals",
+      filters: {},
+      variant: "full",
       sorting: [{ id: "missions", desc: true }],
       visibleColumns: [...columnKeys],
       pageSize: 25,

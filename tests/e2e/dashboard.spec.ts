@@ -981,3 +981,105 @@ test("refresh actions and named views preserve their distinct semantics", async 
     )
     .toBe(true);
 });
+
+test("evaluations applies period and metric to the requested visual only", async ({
+  page,
+}) => {
+  await page.route("**/api/preferences/evaluations", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: null }),
+    });
+  });
+  const detailRequests: URL[] = [];
+  await page.route("**/api/bff/evaluations?*", async (route) => {
+    detailRequests.push(new URL(route.request().url()));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: Array.from({ length: 12 }, (_, index) => ({
+          position: index + 1,
+          cmdr: `Commander ${index + 1}`,
+          squadronRank: "Pilot",
+          missions: 20 - index,
+          missionFailures: index,
+          profit: (index + 1) * 1000,
+          quantity: (index + 1) * 10,
+          bountyVouchers: (index + 1) * 100,
+          combatBonds: (index + 1) * 50,
+        })),
+        metrics: {
+          commanders: 12,
+          missions: 174,
+          quantity: 780,
+          bountyVouchers: 7800,
+        },
+        generated_at: "2026-09-03T12:00:00Z",
+      }),
+    });
+  });
+  let historyRequest: URL | null = null;
+  const historyParam = (key: string) =>
+    historyRequest instanceof URL ? historyRequest.searchParams.get(key) : null;
+  await page.route("**/api/bff/evaluations/history?*", async (route) => {
+    historyRequest = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        metric: historyRequest.searchParams.get("metric"),
+        limit: historyRequest.searchParams.get("mode") === "top5" ? 5 : 10,
+        range: {
+          start: "2026-08-31T00:00:00.000Z",
+          end: "2026-09-07T00:00:00.000Z",
+          label: "2026-08-31 – 2026-09-07 UTC",
+          granularity: "day",
+        },
+        buckets: [
+          { key: "0", label: "Mon, 31 Aug" },
+          { key: "1", label: "Tue, 01 Sept" },
+        ],
+        series: [{ name: "Commander 1", data: [100, 200], total: 300 }],
+        generated_at: "2026-09-03T12:00:00Z",
+      }),
+    });
+  });
+
+  await page.goto("/analytics/evaluations");
+  await expect(
+    page.getByRole("heading", { name: "Evaluations", exact: true }),
+  ).toBeVisible();
+  const period = page.getByRole("combobox", { name: "Period" });
+  const metric = page.getByRole("combobox", { name: "Metric" });
+  await expect(period).toHaveValue("all");
+  await expect(metric).toHaveValue("missions");
+  await expect(
+    page.getByRole("heading", {
+      name: "Missions Completed totals by commander",
+    }),
+  ).toBeVisible();
+
+  await period.selectOption("cw");
+  await expect
+    .poll(() => detailRequests.at(-1)?.searchParams.get("period"))
+    .toBe("cw");
+  await metric.selectOption("profit");
+  expect(
+    detailRequests.every((request) => !request.searchParams.has("metric")),
+  ).toBe(true);
+
+  await page.getByRole("button", { name: "Historical trend" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Profit historical trend" }),
+  ).toBeVisible();
+  await expect.poll(() => historyParam("period")).toBe("cw");
+  expect(historyParam("metric")).toBe("profit");
+  expect(historyParam("mode")).toBe("full");
+  await expect(page.locator(".chart-surface canvas")).toBeVisible();
+
+  await page.getByRole("button", { name: "Top 5 by missions" }).click();
+  await expect.poll(() => historyParam("mode")).toBe("top5");
+  await expect(page.getByText(/Top 5 · Metric does not filter/)).toHaveCount(1);
+});

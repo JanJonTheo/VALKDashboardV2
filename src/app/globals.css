@@ -1157,6 +1157,45 @@ textarea:focus-visible {
   color: var(--faint);
   text-align: right;
 }
+.chart-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+.variant-tabs.compact-tabs {
+  margin: 0;
+  flex: 0 0 auto;
+}
+.variant-tabs.compact-tabs button {
+  min-height: 30px;
+  padding-inline: 10px;
+}
+.chart-inline-state {
+  min-height: 340px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chart-inline-error {
+  color: #efad9c;
+}
+@media (max-width: 760px) {
+  .section-heading,
+  .chart-heading-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .chart-heading-actions {
+    width: 100%;
+  }
+  .table-alternative {
+    text-align: left;
+  }
+}
 .error-banner {
   border: 1px solid #824b3a;
   background: #321c17;

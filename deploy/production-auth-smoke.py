@@ -315,6 +315,26 @@ def main() -> int:
                         f"Leaderboard metric mismatch for {commander}: {view_key}"
                     )
 
+        status, evaluation_history = request(
+            args.base_url,
+            "/api/bff/evaluations/history?period=cm&metric=missions&mode=top5",
+            cookie,
+        )
+        expect(status, 200, "evaluation history")
+        history_buckets = evaluation_history.get("buckets", [])
+        history_series = evaluation_history.get("series", [])
+        if evaluation_history.get("metric") != "missions":
+            raise RuntimeError("Evaluation history returned the wrong metric")
+        if evaluation_history.get("limit") != 5 or len(history_series) > 5:
+            raise RuntimeError("Evaluation history ignored the Top 5 limit")
+        if not history_buckets:
+            raise RuntimeError("Evaluation history returned no period buckets")
+        if any(
+            len(series.get("data", [])) != len(history_buckets)
+            for series in history_series
+        ):
+            raise RuntimeError("Evaluation history series are not aligned to the period")
+
         status, flask_colonisation = bearer_request(
             f"{args.flask_url}/api/colonisation/contributions?period=cm", bearer
         )
@@ -597,8 +617,9 @@ def main() -> int:
         if not preserved or preserved[0] != admin_hash_before:
             raise RuntimeError("Administrator password hash changed during smoke test")
         print(
-            "Production classic sign-in, Better Auth bridge, leaderboard parity, Colonisation parity, "
-            "EDDN parity, BGS watchlist, user administration, and preference smoke test passed"
+            "Production classic sign-in, Better Auth bridge, leaderboard parity, evaluation history, "
+            "Colonisation parity, EDDN parity, BGS watchlist, user administration, and preference "
+            "smoke test passed"
         )
         return 0
     finally:
