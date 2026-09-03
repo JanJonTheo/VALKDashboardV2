@@ -1217,6 +1217,24 @@ export function FeatureDashboard({
               session={session}
               mutation={mutation}
               rows={rows}
+              discordReport={
+                spec.key === "evaluations"
+                  ? {
+                      period: savedView.view.period ?? "all",
+                      mode: savedView.view.variant === "top5" ? "top5" : "full",
+                      from_date: viewFilterString(
+                        savedView.view.filters.from_date,
+                      ),
+                      to_date: viewFilterString(savedView.view.filters.to_date),
+                      from_month: viewFilterString(
+                        savedView.view.filters.from_month,
+                      ),
+                      to_month: viewFilterString(
+                        savedView.view.filters.to_month,
+                      ),
+                    }
+                  : undefined
+              }
               openObjective={() => setObjectiveOpen(true)}
             />
             {!isColonisationView && <ColumnChooser table={table} />}
@@ -1842,6 +1860,7 @@ function FeatureActions({
   session,
   mutation,
   rows,
+  discordReport,
   openObjective,
 }: {
   spec: FeatureSpec;
@@ -1851,8 +1870,17 @@ function FeatureActions({
     isPending: boolean;
   };
   rows: Record<string, unknown>[];
+  discordReport?: Record<string, unknown>;
   openObjective: () => void;
 }) {
+  const reportPeriod = discordReport?.period;
+  const reportReady =
+    reportPeriod === "date-range"
+      ? Boolean(discordReport?.from_date && discordReport?.to_date)
+      : reportPeriod === "month-range"
+        ? Boolean(discordReport?.from_month && discordReport?.to_month)
+        : true;
+
   return (
     <>
       {spec.actions?.includes("create-objective") &&
@@ -1866,8 +1894,13 @@ function FeatureActions({
         session.capabilities.includes("reports:send") && (
           <button
             className="primary-button"
-            disabled={mutation.isPending}
-            onClick={() => mutation.mutate({ action: "discord-report" })}
+            disabled={mutation.isPending || !reportReady}
+            onClick={() =>
+              mutation.mutate({
+                action: "discord-report",
+                ...discordReport,
+              })
+            }
           >
             <Bot size={15} />
             Send report

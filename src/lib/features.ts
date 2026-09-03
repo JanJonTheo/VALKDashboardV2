@@ -96,6 +96,24 @@ const periodFilter = (defaultValue = "all"): FeatureFilter => ({
   options: periodOptions,
 });
 
+const leaderboardColumns: FeatureColumn[] = [
+  { key: "position", label: "#", numeric: true },
+  { key: "cmdr", label: "Commander", priority: true },
+  { key: "squadronRank", label: "Squadron rank" },
+  { key: "missions", label: "Missions completed", numeric: true },
+  { key: "missionFailures", label: "Missions failed", numeric: true },
+  { key: "influence", label: "Influence", numeric: true },
+  { key: "buy", label: "Buy", numeric: true },
+  { key: "sell", label: "Sell", numeric: true },
+  { key: "profit", label: "Profit", numeric: true },
+  { key: "volume", label: "Volume", numeric: true },
+  { key: "quantity", label: "Quantity", numeric: true },
+  { key: "bountyVouchers", label: "Bounty vouchers", numeric: true },
+  { key: "combatBonds", label: "Combat bonds", numeric: true },
+  { key: "explorationSales", label: "Exploration sales", numeric: true },
+  { key: "bountyFines", label: "Bounty fines", numeric: true },
+];
+
 export const features: FeatureSpec[] = [
   {
     key: "leaderboard",
@@ -137,23 +155,7 @@ export const features: FeatureSpec[] = [
         placeholder: "Exact system name",
       },
     ],
-    columns: [
-      { key: "position", label: "#", numeric: true },
-      { key: "cmdr", label: "Commander", priority: true },
-      { key: "squadronRank", label: "Squadron rank" },
-      { key: "missions", label: "Missions completed", numeric: true },
-      { key: "missionFailures", label: "Missions failed", numeric: true },
-      { key: "influence", label: "Influence", numeric: true },
-      { key: "buy", label: "Buy", numeric: true },
-      { key: "sell", label: "Sell", numeric: true },
-      { key: "profit", label: "Profit", numeric: true },
-      { key: "volume", label: "Volume", numeric: true },
-      { key: "quantity", label: "Quantity", numeric: true },
-      { key: "bountyVouchers", label: "Bounty vouchers", numeric: true },
-      { key: "combatBonds", label: "Combat bonds", numeric: true },
-      { key: "explorationSales", label: "Exploration sales", numeric: true },
-      { key: "bountyFines", label: "Bounty fines", numeric: true },
-    ],
+    columns: leaderboardColumns,
     metrics: [
       { label: "Commanders", key: "commanders" },
       { label: "Selected total", key: "selectedTotal" },
@@ -211,15 +213,7 @@ export const features: FeatureSpec[] = [
         placeholder: "Filter loaded commanders",
       },
     ],
-    columns: [
-      { key: "position", label: "#", numeric: true },
-      { key: "cmdr", label: "Commander", priority: true },
-      { key: "squadronRank", label: "Squadron rank" },
-      { key: "missions", label: "Missions", numeric: true },
-      { key: "quantity", label: "Trade quantity", numeric: true },
-      { key: "bountyVouchers", label: "Bounty vouchers", numeric: true },
-      { key: "combatBonds", label: "Combat bonds", numeric: true },
-    ],
+    columns: leaderboardColumns,
     metrics: [
       { label: "Evaluated", key: "commanders" },
       { label: "Missions", key: "missions" },

@@ -1046,11 +1046,44 @@ test("evaluations applies period and metric to the requested visual only", async
       }),
     });
   });
+  let discordReport: Record<string, unknown> | null = null;
+  await page.route("**/api/bff/evaluations", async (route) => {
+    discordReport = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "sent" }),
+    });
+  });
 
   await page.goto("/analytics/evaluations");
   await expect(
     page.getByRole("heading", { name: "Evaluations", exact: true }),
   ).toBeVisible();
+  await expect
+    .poll(async () =>
+      (await page.locator(".desktop-table thead th").allTextContents()).map(
+        (label) => label.trim(),
+      ),
+    )
+    .toEqual([
+      "#",
+      "Commander",
+      "Squadron rank",
+      "Missions completed",
+      "Missions failed",
+      "Influence",
+      "Buy",
+      "Sell",
+      "Profit",
+      "Volume",
+      "Quantity",
+      "Bounty vouchers",
+      "Combat bonds",
+      "Exploration sales",
+      "Bounty fines",
+      "Actions",
+    ]);
   const period = page.getByRole("combobox", { name: "Period" });
   const metric = page.getByRole("combobox", { name: "Metric" });
   await expect(period).toHaveValue("all");
@@ -1065,6 +1098,18 @@ test("evaluations applies period and metric to the requested visual only", async
   await expect
     .poll(() => detailRequests.at(-1)?.searchParams.get("period"))
     .toBe("cw");
+  await page.getByRole("button", { name: "Send report" }).click();
+  await expect
+    .poll(() => discordReport)
+    .toEqual({
+      action: "discord-report",
+      period: "cw",
+      mode: "full",
+      from_date: "",
+      to_date: "",
+      from_month: "",
+      to_month: "",
+    });
   await metric.selectOption("profit");
   expect(
     detailRequests.every((request) => !request.searchParams.has("metric")),
@@ -1082,4 +1127,8 @@ test("evaluations applies period and metric to the requested visual only", async
   await page.getByRole("button", { name: "Top 5 by missions" }).click();
   await expect.poll(() => historyParam("mode")).toBe("top5");
   await expect(page.getByText(/Top 5 · Metric does not filter/)).toHaveCount(1);
+  await page.getByRole("button", { name: "Send report" }).click();
+  await expect
+    .poll(() => (discordReport as { mode?: unknown } | null)?.mode)
+    .toBe("top5");
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const preferenceSchemaVersion = 4;
+export const preferenceSchemaVersion = 5;
 export const maximumSavedViews = 20;
 
 export const leaderboardMetricOptions = [

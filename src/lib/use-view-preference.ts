@@ -56,7 +56,7 @@ function createViewId() {
 export function useStoredViewPreference(
   viewKey: string,
   defaults: ViewPreference,
-  hydrate?: (view: ViewPreference) => ViewPreference,
+  hydrate?: (view: ViewPreference, schemaVersion: number) => ViewPreference,
   legacyViewKey?: string,
 ) {
   const queryClient = useQueryClient();
@@ -100,7 +100,11 @@ export function useStoredViewPreference(
       preference.data?.data?.payload,
       defaults,
     );
-    const current = hydrate ? hydrate(stored.current) : stored.current;
+    const schemaVersion =
+      preference.data?.data?.schema_version ?? preferenceSchemaVersion;
+    const current = hydrate
+      ? hydrate(stored.current, schemaVersion)
+      : stored.current;
     const hydrated = viewPreferencesEqual(current, stored.current)
       ? stored
       : { ...stored, current, activeViewId: null };
@@ -347,11 +351,13 @@ export function useViewPreference(
     [spec],
   );
   const hydrate = useCallback(
-    (stored: ViewPreference) => {
+    (stored: ViewPreference, schemaVersion: number) => {
       const next: ViewPreference = {
         ...stored,
         filters: { ...stored.filters },
       };
+      if (spec.key === "evaluations" && schemaVersion < 5)
+        next.visibleColumns = [...defaults.visibleColumns];
       if (searchParams.has("q")) next.search = searchParams.get("q") ?? "";
       if (searchParams.has("period"))
         next.period = searchParams.get("period") || defaults.period;
@@ -386,7 +392,7 @@ export function useViewPreference(
         next.pageSize = pageSize;
       return next;
     },
-    [defaults.period, searchParams, spec],
+    [defaults, searchParams, spec],
   );
   const stored = useStoredViewPreference(spec.key, defaults, hydrate);
 

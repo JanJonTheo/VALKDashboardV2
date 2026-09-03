@@ -90,6 +90,15 @@ paths:
                         {
                           page: { type: string },
                           mode: { type: string, enum: [full, top5] },
+                          period:
+                            {
+                              type: string,
+                              enum:
+                                [ct, lt, cd, ld, cw, lw, cm, lm, 2m, y, all],
+                            },
+                          from_date: { type: string, format: date },
+                          to_date: { type: string, format: date },
+                          group_by: { type: string, enum: [month] },
                         },
                     },
                 },

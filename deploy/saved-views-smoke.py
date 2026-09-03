@@ -101,7 +101,7 @@ def main():
             collection = {"current": view, "activeViewId": "smoke-0", "views": views}
             checked(args.base_url, endpoint, cookie, "PUT", collection)
             stored = checked(args.base_url, endpoint, cookie)["data"]
-            assert stored["schema_version"] == 3 and stored["payload"] == collection
+            assert stored["schema_version"] == 5 and stored["payload"] == collection
             if len(cookies) > 1:
                 assert checked(args.base_url, endpoint, cookies[1])["data"] is None
             collection["views"][0]["name"] = "Renamed smoke view"

@@ -982,6 +982,25 @@ export interface operations {
           page: string;
           /** @enum {string} */
           mode?: "full" | "top5";
+          /** @enum {string} */
+          period?:
+            | "ct"
+            | "lt"
+            | "cd"
+            | "ld"
+            | "cw"
+            | "lw"
+            | "cm"
+            | "lm"
+            | "2m"
+            | "y"
+            | "all";
+          /** Format: date */
+          from_date?: string;
+          /** Format: date */
+          to_date?: string;
+          /** @enum {string} */
+          group_by?: "month";
         };
       };
     };

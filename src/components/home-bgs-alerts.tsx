@@ -82,6 +82,7 @@ export function HomeBgsAlerts({ tenantId }: { tenantId: string }) {
             className="home-alert-list"
             role="list"
             aria-label="Current BGS alerts"
+            tabIndex={0}
           >
             {alerts.map((alert) => (
               <article

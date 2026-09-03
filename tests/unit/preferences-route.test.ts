@@ -29,7 +29,7 @@ describe("preference storage limit", () => {
     upstream.mockResolvedValue(new Response('{"ok":true}'));
   });
 
-  it("forwards collections using schema version 4", async () => {
+  it("forwards collections using schema version 5", async () => {
     const current = {
       filters: {},
       sorting: [],
@@ -39,7 +39,7 @@ describe("preference storage limit", () => {
     const response = await put({ current, activeViewId: null, views: [] });
     expect(response.status).toBe(200);
     expect(await upstream.mock.calls[0][1].json()).toEqual({
-      schema_version: 4,
+      schema_version: 5,
       payload: { current, activeViewId: null, views: [] },
     });
   });

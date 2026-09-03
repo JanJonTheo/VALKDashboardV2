@@ -6,7 +6,7 @@ import {
   orderExplorerColumns,
   type DataExplorerRow,
 } from "@/lib/data-explorer";
-import { features, type FeatureSpec } from "@/lib/features";
+import { features, periodOptions, type FeatureSpec } from "@/lib/features";
 import { mockPayload } from "@/lib/mock-data";
 import { flaskRequest } from "@/lib/flask";
 import { AccessError, requireDashboardSession } from "@/lib/session";
@@ -22,8 +22,81 @@ function demo() {
   );
 }
 
+interface FeatureActionBody {
+  action?: string;
+  title?: string;
+  system?: string;
+  target?: number;
+  due?: string;
+  notes?: string;
+  monthly_data?: unknown[];
+  period?: string;
+  mode?: string;
+  from_date?: string;
+  to_date?: string;
+  from_month?: string;
+  to_month?: string;
+}
+
+const reportPresetPeriods = new Set(
+  periodOptions
+    .map((option) => option.value)
+    .filter((period) => period !== "date-range" && period !== "month-range"),
+);
+
+class InvalidActionError extends Error {}
+
+function isDate(value: string | undefined) {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function isMonth(value: string | undefined) {
+  return Boolean(value && /^\d{4}-\d{2}$/.test(value));
+}
+
+function discordReportPayload(body: FeatureActionBody) {
+  const payload: Record<string, string> = {
+    page: "evaluations",
+    mode: body.mode === "top5" ? "top5" : "full",
+  };
+
+  if (body.period === "date-range") {
+    if (!isDate(body.from_date) || !isDate(body.to_date))
+      throw new InvalidActionError(
+        "A complete date range is required for the Discord report",
+      );
+    payload.from_date = body.from_date!;
+    payload.to_date = body.to_date!;
+    return payload;
+  }
+
+  if (body.period === "month-range") {
+    if (!isMonth(body.from_month) || !isMonth(body.to_month))
+      throw new InvalidActionError(
+        "A complete month range is required for the Discord report",
+      );
+    payload.from_date = `${body.from_month}-01`;
+    const [year, month] = body.to_month!.split("-").map(Number);
+    payload.to_date = new Date(Date.UTC(year, month, 0))
+      .toISOString()
+      .slice(0, 10);
+    payload.group_by = "month";
+    return payload;
+  }
+
+  payload.period = reportPresetPeriods.has(body.period ?? "")
+    ? body.period!
+    : "all";
+  return payload;
+}
+
 function errorResponse(error: unknown, correlation: string) {
-  const status = error instanceof AccessError ? error.status : 502;
+  const status =
+    error instanceof AccessError
+      ? error.status
+      : error instanceof InvalidActionError
+        ? 400
+        : 502;
   const message =
     error instanceof Error ? error.message : "Unexpected dashboard error";
   return NextResponse.json(
@@ -34,7 +107,9 @@ function errorResponse(error: unknown, correlation: string) {
             ? "UNAUTHENTICATED"
             : status === 403
               ? "FORBIDDEN"
-              : "UPSTREAM_ERROR",
+              : status === 400
+                ? "INVALID_ACTION"
+                : "UPSTREAM_ERROR",
         message,
         correlation_id: correlation,
       },
@@ -455,15 +530,7 @@ export async function POST(
     const body = (await request
       .clone()
       .json()
-      .catch(() => ({}))) as {
-      action?: string;
-      title?: string;
-      system?: string;
-      target?: number;
-      due?: string;
-      notes?: string;
-      monthly_data?: unknown[];
-    };
+      .catch(() => ({}))) as FeatureActionBody;
     const capability = body.action?.includes("discord-report")
       ? "reports:send"
       : body.action?.includes("ai-assessment")
@@ -494,7 +561,7 @@ export async function POST(
         ? "summary/monthly-performance/assessment"
         : spec.endpoint;
     const upstreamBody = body.action?.includes("discord-report")
-      ? { page: "evaluations", mode: "full" }
+      ? discordReportPayload(body)
       : body.action?.includes("ai-assessment")
         ? { monthly_data: body.monthly_data ?? [] }
         : body.action === "create"

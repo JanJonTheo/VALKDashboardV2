@@ -11,6 +11,26 @@ Die Historie beginnt mit `c11adc9` vom 29.08.2026 und umfasst alle zehn bisher v
 - Dieses Changelog mit der vollständigen bisherigen Änderungshistorie hinzugefügt.
 - Changelog in der README verlinkt.
 
+## 03.09.2026 – Einheitliche Evaluations-Details und periodenabhängige Discord-Berichte
+
+Status: am 03.09.2026 um 10:59 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260903-104316-evaluation-details-discord-period`.
+
+### Geändert und behoben
+
+- Die Detailtabelle in Evaluations verwendet nun dieselben 15 Spalten in derselben Reihenfolge wie die Detailtabelle im Leaderboard.
+- „Send Discord Report“ übermittelt die ausgewählte vordefinierte Periode sowie eigene Datums- und Monatsbereiche an das Backend; vollständige und Top-5-Berichte bleiben dabei erhalten.
+- Unvollständige eigene Zeiträume deaktivieren den Versand und werden zusätzlich serverseitig abgelehnt, statt stillschweigend auf „All“ zurückzufallen.
+- Preference-Schema auf Version 5 angehoben, damit bestehende Evaluations-Ansichten einmalig die vollständige neue Standardspaltenauswahl erhalten.
+- Die BGS-Alertliste ist auf kleinen Ansichten per Tastatur fokussierbar, damit der horizontale Scrollbereich zugänglich bleibt.
+- OpenAPI-Vertrag, generierte Typen sowie Unit- und Browser-Tests für Spaltenreihenfolge und Discord-Payloads erweitert.
+
+### Deployment und Prüfung
+
+- Lint, TypeScript-Prüfung, Linux-Produktionsbuild, 146 Unit-Tests und die vollständige Browser-Testmatrix mit 29 erfolgreichen und 4 planmäßig übersprungenen Tests ausgeführt.
+- Den neuen Linux-Release separat gebaut und vor der Umschaltung intern geprüft; anschließend öffentliche HTTPS-, Authentifizierungs-, Better-Auth-, Datenparitäts-, Evaluations-, EDDN-, Watchlist-, Benutzerverwaltungs- und Preference-Smoke-Tests für alle drei Mandanten erfolgreich ausgeführt.
+- Saved-Views-Smoke an Schema-Version 5 angepasst; alle temporären Benutzer-, Sitzungs-, View- und Watchlist-Daten wurden durch die Tests entfernt.
+- Den vorherigen Dashboard-Release, das hochgeladene Deployment-Archiv und die Staging-Reste nach erfolgreicher Produktivprüfung entfernt.
+
 ## 03.09.2026 – Perioden- und Kennzahlenanalyse für Evaluations
 
 Status: am 03.09.2026 um 01:27 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260903-012139-evaluation-period-metrics`.
