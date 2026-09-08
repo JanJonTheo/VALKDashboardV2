@@ -61,7 +61,7 @@ export const bgsRuleConditionOptions: Array<{
     value: "tenant_faction_loss",
     label: "Tenant faction loses influence",
     description:
-      "The tenant faction loses the threshold since the previous settled BGS tick.",
+      "The tenant faction loses the threshold since its previous available settled snapshot, even across several days.",
     usesWindow: false,
   },
   {
@@ -238,6 +238,12 @@ export interface BgsRuleCatalogPayload {
 }
 
 export interface BgsAlert {
+  discord?: {
+    configured: boolean;
+    status: string | null;
+    last_sent_at: string | null;
+    error: string | null;
+  };
   id: string;
   rule_id: string | null;
   rule_name: string;

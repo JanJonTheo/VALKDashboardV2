@@ -17,10 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  Clock3,
   Construction,
   ExternalLink,
-  Factory,
   Flag,
   Flame,
   FlaskConical,
@@ -49,7 +47,18 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
+import {
+  SystemLabelsEditor,
+  SystemLinksMenu,
+} from "@/components/watchlist-system-actions";
+import {
+  FactionCardContents,
+  SystemFacts,
+  factionFillStyle,
+  formatUpdated,
+} from "@/components/watchlist-parts";
+export { factionFillStyle } from "@/components/watchlist-parts";
+import type { WatchlistLabels } from "@/lib/watchlist-labels";
 import {
   useCallback,
   useEffect,
@@ -85,6 +94,7 @@ import {
   type GlobalWatchlistSortField,
 } from "@/lib/global-system-watchlist";
 import { CopyTextButton } from "@/components/copy-text-button";
+import { factionKey, type AlertContext } from "@/lib/alert-context";
 import { BgsAiPanel } from "@/components/bgs-ai-panel";
 import { BgsRuleManager } from "@/components/bgs-rule-manager";
 import { PageViewRegistration } from "@/components/page-view-context";
@@ -115,6 +125,8 @@ interface GlobalWatchlistPayload {
   generatedAt: string;
   pagination: { page: number; pageSize: number; total: number };
   filterOptions: {
+    sectors: string[];
+    projects: string[];
     allegiances: GlobalWatchlistFilterOption[];
     governments: GlobalWatchlistFilterOption[];
   };
@@ -132,23 +144,6 @@ interface ProtectedWatchlistPayload extends GlobalWatchlistPayload {
   selectedProtectedFactionId: number | null;
 }
 
-const superpowerIconSources: Record<string, string> = {
-  alliance: "/superpowers/alliance.svg",
-  empire: "/superpowers/empire.svg",
-  federation: "/superpowers/federation.svg",
-  independent: "/superpowers/independent.webp",
-};
-
-function superpowerIconSource(allegiance: string) {
-  const normalized = allegiance
-    .trim()
-    .toLocaleLowerCase("en")
-    .replace(/^\$/, "")
-    .replace(/;$/, "");
-  const key = normalized.split(/[_\s]+/).at(-1) ?? "";
-  return superpowerIconSources[key];
-}
-
 function filterOptionValues(
   systems: WatchedSystem[],
   field: "allegiance" | "government",
@@ -158,11 +153,8 @@ function filterOptionValues(
     .map((value) => ({ value, label: value }));
 }
 
-function activeFilterCount(filters: WatchlistFilters, scope: WatchlistScope) {
-  return Object.entries(filters).filter(
-    ([key, value]) =>
-      Boolean(value) && (scope === "personal" || key !== "sector"),
-  ).length;
+function activeFilterCount(filters: WatchlistFilters) {
+  return Object.values(filters).filter(Boolean).length;
 }
 
 type WatchlistViewChange = {
@@ -353,6 +345,8 @@ async function loadGlobalWatchlist(
   });
   const optionalParameters: Record<string, string> = {
     system: filters.system,
+    sector: filters.sector,
+    project_name: filters.projectName,
     controlling_faction: filters.controllingFaction,
     population_min: filters.populationMin,
     population_max: filters.populationMax,
@@ -390,6 +384,12 @@ async function loadGlobalWatchlist(
       total: Number(pagination.total) || 0,
     },
     filterOptions: {
+      sectors: Array.isArray(filterOptions.sectors)
+        ? (filterOptions.sectors as string[])
+        : [],
+      projects: Array.isArray(filterOptions.projects)
+        ? (filterOptions.projects as string[])
+        : [],
       allegiances: Array.isArray(filterOptions.allegiances)
         ? (filterOptions.allegiances as GlobalWatchlistFilterOption[])
         : [],
@@ -416,6 +416,8 @@ async function loadProtectedWatchlist(
     parameters.set("protected_faction_id", String(protectedFactionId));
   const optionalParameters: Record<string, string> = {
     system: filters.system,
+    sector: filters.sector,
+    project_name: filters.projectName,
     controlling_faction: filters.controllingFaction,
     population_min: filters.populationMin,
     population_max: filters.populationMax,
@@ -456,6 +458,12 @@ async function loadProtectedWatchlist(
       total: Number(pagination.total) || 0,
     },
     filterOptions: {
+      sectors: Array.isArray(filterOptions.sectors)
+        ? (filterOptions.sectors as string[])
+        : [],
+      projects: Array.isArray(filterOptions.projects)
+        ? (filterOptions.projects as string[])
+        : [],
       allegiances: Array.isArray(filterOptions.allegiances)
         ? (filterOptions.allegiances as GlobalWatchlistFilterOption[])
         : [],
@@ -497,43 +505,6 @@ async function loadStations(system: string): Promise<StationPayload> {
   );
 }
 
-type FactionFillStyle = CSSProperties & {
-  "--faction-colour": string;
-  "--faction-fill": string;
-  "--superpower-icon"?: string;
-};
-
-export function factionFillStyle(
-  faction: Pick<WatchedFaction, "influence" | "allegiance">,
-  colour: string,
-): FactionFillStyle {
-  const influence = Math.min(100, Math.max(0, faction.influence));
-  const icon = superpowerIconSource(faction.allegiance);
-  return {
-    borderLeftColor: colour,
-    "--faction-colour": colour,
-    "--faction-fill": `${influence}%`,
-    ...(icon ? { "--superpower-icon": `url("${icon}")` } : {}),
-  };
-}
-
-function formatPopulation(value: number) {
-  return new Intl.NumberFormat("en-GB", { notation: "compact" }).format(value);
-}
-
-function formatUpdated(value: string) {
-  if (!value) return "No update";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(date);
-}
-
 function escapeHtml(value: string) {
   return value.replace(
     /[&<>'"]/g,
@@ -548,37 +519,17 @@ function escapeHtml(value: string) {
   );
 }
 
-function BgsChip({
-  icon: Icon,
-  label,
-  value,
-  kind,
-  status,
-  showLabel = false,
+function InfluenceHistoryChart({
+  factions,
+  alertContext,
 }: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  kind: "government" | "allegiance" | "status" | "economy" | "neutral";
-  status?: "active" | "pending";
-  showLabel?: boolean;
+  factions: WatchedFaction[];
+  alertContext?: AlertContext;
 }) {
-  if (!value) return null;
-  return (
-    <span
-      className="bgs-chip"
-      data-kind={kind}
-      data-status={status}
-      title={`${label}: ${value}`}
-    >
-      <Icon size={10} aria-hidden="true" />
-      {showLabel && <small>{label}</small>}
-      <span className="bgs-chip-value">{value}</span>
-    </span>
-  );
-}
-
-function InfluenceHistoryChart({ factions }: { factions: WatchedFaction[] }) {
+  const affected = (name: string) =>
+    alertContext?.factions.some(
+      (item) => factionKey(item) === factionKey(name),
+    ) ?? false;
   const histories = factions.filter((faction) => faction.history.length > 0);
   const colours = assignFactionColours(factions);
   if (!histories.length)
@@ -598,6 +549,7 @@ function InfluenceHistoryChart({ factions }: { factions: WatchedFaction[] }) {
     color: histories.map((faction) => colours.get(faction.name) ?? "#e8bd52"),
     textStyle: { fontFamily: "Arial, sans-serif", color: "#aab4c1" },
     legend: {
+      formatter: (name: string) => (affected(name) ? `⚠ ${name}` : name),
       type: "scroll",
       top: 4,
       left: 4,
@@ -701,7 +653,7 @@ function InfluenceHistoryChart({ factions }: { factions: WatchedFaction[] }) {
         symbol: "circle",
         symbolSize: 7,
         connectNulls: false,
-        lineStyle: { width: 2, color: colour },
+        lineStyle: { width: affected(faction.name) ? 4 : 2, color: colour },
         itemStyle: {
           color: colour,
           borderColor: "#0d1218",
@@ -1065,7 +1017,7 @@ function edgisPageUrl(system: string) {
   return `https://elitedangereuse.fr/outils/sysmap.php?system=${encodeURIComponent(system)}`;
 }
 
-function EdgisSystemMapDialog({
+export function EdgisSystemMapDialog({
   system,
   open,
   onOpenChange,
@@ -1222,16 +1174,18 @@ function BgsAiDialog({
   );
 }
 
-function SystemRecordDetail({
+export function SystemRecordDetail({
   system,
   open,
   onOpenChange,
   canRunBgsAi,
+  alertContext,
 }: {
   system: WatchedSystem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canRunBgsAi: boolean;
+  alertContext?: AlertContext;
 }) {
   const colours = assignFactionColours(system.factions);
   const [mapOpen, setMapOpen] = useState(false);
@@ -1279,6 +1233,22 @@ function SystemRecordDetail({
               </Dialog.Close>
             </div>
           </div>
+          {alertContext && (
+            <aside className={`record-alert-context ${alertContext.severity}`}>
+              <AlertTriangle size={20} />
+              <div>
+                <strong>
+                  {alertContext.summary}{" "}
+                  {alertContext.threshold && `· ${alertContext.threshold}`}
+                </strong>
+                <span>
+                  At trigger: {alertContext.timestamp}
+                  {alertContext.resolved ? " · Resolved" : ""}. System data
+                  below is current.
+                </span>
+              </div>
+            </aside>
+          )}
           <dl className="detail-list">
             <div>
               <dt>System</dt>
@@ -1401,16 +1371,25 @@ function SystemRecordDetail({
                     const colour = colours.get(faction.name) ?? "#e8bd52";
                     return (
                       <tr
-                        className="watch-history-faction-row"
+                        className={`watch-history-faction-row${alertContext?.factions.some((name) => factionKey(name) === factionKey(faction.name)) ? " alert-affected-faction" : ""}`}
                         key={faction.name}
                         style={factionFillStyle(faction, colour)}
-                        aria-label={`${faction.name}, influence ${faction.influence.toFixed(2)} percent`}
+                        aria-label={`${faction.name}, influence ${faction.influenceKnown === false ? "unavailable" : `${faction.influence.toFixed(2)} percent`}`}
                       >
                         <td>
                           <strong>
                             <i style={{ backgroundColor: colour }} />
                             {faction.name}
                           </strong>
+                          {alertContext?.factions.some(
+                            (name) =>
+                              factionKey(name) === factionKey(faction.name),
+                          ) && (
+                            <small className="faction-alert-note">
+                              <AlertTriangle size={14} />
+                              {alertContext.summary} · at trigger
+                            </small>
+                          )}
                         </td>
                         <td>
                           <BgsStateCell states={faction.activeStates} />
@@ -1419,7 +1398,11 @@ function SystemRecordDetail({
                           <BgsStateCell states={faction.pendingStates} />
                         </td>
                         <td>
-                          <b>{faction.influence.toFixed(2)}%</b>
+                          <b>
+                            {faction.influenceKnown === false
+                              ? "—"
+                              : `${faction.influence.toFixed(2)}%`}
+                          </b>
                         </td>
                       </tr>
                     );
@@ -1463,7 +1446,17 @@ function SystemRecordDetail({
                 <History size={12} aria-hidden="true" /> Last 7 days
               </b>
             </header>
-            <InfluenceHistoryChart factions={system.factions} />
+            {alertContext?.factions.length ? (
+              <p className="alert-history-context">
+                <AlertTriangle size={14} /> Alarm:{" "}
+                {alertContext.factions.join(" · ")} — {alertContext.summary} at
+                trigger
+              </p>
+            ) : null}
+            <InfluenceHistoryChart
+              factions={system.factions}
+              alertContext={alertContext}
+            />
           </section>
           <BgsAiPanel system={system.name} canRun={canRunBgsAi} />
           <footer>
@@ -1596,7 +1589,7 @@ function FactionRail({
               className={`watch-faction-card${active === faction.name ? " active" : active ? " muted" : ""}`}
               key={faction.name}
               style={factionFillStyle(faction, colour)}
-              aria-label={`${faction.name}, influence ${faction.influence.toFixed(2)} percent`}
+              aria-label={`${faction.name}, influence ${faction.influenceKnown === false ? "unavailable" : `${faction.influence.toFixed(2)} percent`}`}
               tabIndex={0}
               onClick={(event) => {
                 if (suppressClickRef.current) {
@@ -1614,49 +1607,7 @@ function FactionRail({
               onFocus={() => onActive(faction.name)}
               onBlur={() => onActive(undefined)}
             >
-              <div className="watch-faction-primary">
-                <strong title={faction.name}>
-                  <i style={{ backgroundColor: colour }} />
-                  {faction.name}
-                </strong>
-                <b>{faction.influence.toFixed(2)}%</b>
-              </div>
-              <div className="watch-faction-attributes">
-                <div className="watch-faction-classification">
-                  <BgsChip
-                    icon={Building2}
-                    label="Government"
-                    value={faction.government}
-                    kind="government"
-                  />
-                  <BgsChip
-                    icon={Flag}
-                    label="Allegiance"
-                    value={faction.allegiance}
-                    kind="allegiance"
-                  />
-                </div>
-                <div className="watch-faction-status-line">
-                  <BgsChip
-                    icon={Zap}
-                    label="Active"
-                    value={faction.activeStates.join(", ") || "None"}
-                    kind="status"
-                    status="active"
-                    showLabel
-                  />
-                </div>
-                <div className="watch-faction-status-line">
-                  <BgsChip
-                    icon={Clock3}
-                    label="Pending"
-                    value={faction.pendingStates.join(", ") || "None"}
-                    kind="status"
-                    status="pending"
-                    showLabel
-                  />
-                </div>
-              </div>
+              <FactionCardContents faction={faction} colour={colour} />
             </article>
           );
         })}
@@ -1689,6 +1640,8 @@ export function SystemStrip({
   personalWatchlistFull = false,
   onCreateRule,
   canRunBgsAi,
+  canEditLabels = false,
+  onSaveLabels,
 }: {
   scope: WatchlistScope;
   entry: SystemWatchlistEntry;
@@ -1703,6 +1656,8 @@ export function SystemStrip({
   personalWatchlistFull?: boolean;
   onCreateRule: () => void;
   canRunBgsAi: boolean;
+  canEditLabels?: boolean;
+  onSaveLabels?: (labels: WatchlistLabels) => Promise<unknown>;
 }) {
   const [activeFaction, setActiveFaction] = useState<string>();
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1763,35 +1718,7 @@ export function SystemStrip({
           )}
         </div>
         {system.available ? (
-          <div className="watch-system-facts">
-            <span className="watch-controller" title="Controlling faction">
-              {system.controllingFaction || "No controlling faction"}
-            </span>
-            <BgsChip
-              icon={Flag}
-              label="Allegiance"
-              value={system.allegiance}
-              kind="allegiance"
-            />
-            <BgsChip
-              icon={Building2}
-              label="Government"
-              value={system.government}
-              kind="government"
-            />
-            <span className="watch-plain-fact" title="Population">
-              <Users size={10} /> {formatPopulation(system.population)}
-            </span>
-            <BgsChip
-              icon={Factory}
-              label="Economy"
-              value={system.economy}
-              kind="economy"
-            />
-            <span className="watch-plain-fact" title="Information updated">
-              <Clock3 size={10} /> {formatUpdated(system.updatedAt)}
-            </span>
-          </div>
+          <SystemFacts system={system} />
         ) : (
           <span className="watch-unavailable-label">No EDDN system data</span>
         )}
@@ -1862,13 +1789,14 @@ export function SystemStrip({
               )}
             </button>
           )}
-          <Link
-            href={`/intelligence/systems?system=${encodeURIComponent(entry.system)}`}
-            aria-label={`Open full system information for ${entry.system}`}
-            title="Open full system information"
-          >
-            <ExternalLink size={13} />
-          </Link>
+          {(canEditLabels || onSaveLabels) && (
+            <SystemLabelsEditor
+              labels={entry}
+              shared={scope !== "personal"}
+              onSave={onSaveLabels}
+            />
+          )}
+          <SystemLinksMenu system={entry.system} />
           <button
             type="button"
             className="watch-map-button"
@@ -2043,6 +1971,7 @@ function WatchlistFilterSheet({
   scope,
   filters,
   sectors,
+  projects,
   allegianceOptions,
   governmentOptions,
   onApply,
@@ -2052,6 +1981,7 @@ function WatchlistFilterSheet({
   scope: WatchlistScope;
   filters: WatchlistFilters;
   sectors: string[];
+  projects: string[];
   allegianceOptions: GlobalWatchlistFilterOption[];
   governmentOptions: GlobalWatchlistFilterOption[];
   onApply: (filters: WatchlistFilters) => void;
@@ -2195,22 +2125,34 @@ function WatchlistFilterSheet({
                 ))}
               </select>
             </label>
-            {scope === "personal" && (
-              <label>
-                <span>Sector</span>
-                <select
-                  value={draft.sector}
-                  onChange={(event) => update("sector", event.target.value)}
-                >
-                  <option value="">All sectors</option>
-                  {sectors.map((sector) => (
-                    <option value={sector} key={sector}>
-                      {sector}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <label>
+              <span>Sector</span>
+              <select
+                value={draft.sector}
+                onChange={(event) => update("sector", event.target.value)}
+              >
+                <option value="">All sectors</option>
+                {sectors.map((sector) => (
+                  <option value={sector} key={sector}>
+                    {sector}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Project name</span>
+              <select
+                value={draft.projectName}
+                onChange={(event) => update("projectName", event.target.value)}
+              >
+                <option value="">All projects</option>
+                {projects.map((project) => (
+                  <option value={project} key={project}>
+                    {project}
+                  </option>
+                ))}
+              </select>
+            </label>
             <footer>
               <button
                 className="secondary-button"
@@ -2432,8 +2374,8 @@ function PersonalSystemWatchlist({
         >
           <ListFilter size={14} aria-hidden="true" />
           Filters
-          {activeFilterCount(filters, "personal") > 0 && (
-            <span>{activeFilterCount(filters, "personal")}</span>
+          {activeFilterCount(filters) > 0 && (
+            <span>{activeFilterCount(filters)}</span>
           )}
         </button>
         <div className="watchlist-sort-controls">
@@ -2530,6 +2472,20 @@ function PersonalSystemWatchlist({
                 setRuleSystem(entry.system);
                 setRulesOpen(true);
               }}
+              onSaveLabels={(labels) =>
+                mutation.mutateAsync(
+                  watchlist.map((candidate) =>
+                    candidate.system.toLocaleLowerCase("en") ===
+                    entry.system.toLocaleLowerCase("en")
+                      ? {
+                          ...candidate,
+                          sector: labels.sector,
+                          projectName: labels.projectName,
+                        }
+                      : candidate,
+                  ),
+                )
+              }
               onToggleFavorite={() =>
                 mutation.mutate(
                   watchlist.map((candidate) =>
@@ -2567,6 +2523,11 @@ function PersonalSystemWatchlist({
         scope="personal"
         filters={filters}
         sectors={sectors}
+        projects={[
+          ...new Set(
+            watchlist.map((entry) => entry.projectName).filter(Boolean),
+          ),
+        ].sort()}
         allegianceOptions={allegianceOptions}
         governmentOptions={governmentOptions}
         onApply={setFilters}
@@ -2750,8 +2711,8 @@ function GlobalSystemWatchlist({
         >
           <ListFilter size={14} aria-hidden="true" />
           Filters
-          {activeFilterCount(filters, "global") > 0 && (
-            <span>{activeFilterCount(filters, "global")}</span>
+          {activeFilterCount(filters) > 0 && (
+            <span>{activeFilterCount(filters)}</span>
           )}
         </button>
         <div className="watchlist-sort-controls">
@@ -2822,8 +2783,8 @@ function GlobalSystemWatchlist({
         {(query.data?.systems ?? []).map((system) => {
           const entry: SystemWatchlistEntry = {
             system: system.requestedSystem || system.name,
-            sector: "",
-            projectName: "",
+            sector: system.sector ?? "",
+            projectName: system.projectName ?? "",
             favorite: false,
           };
           const alreadyPersonal = personalSystems.has(
@@ -2838,6 +2799,7 @@ function GlobalSystemWatchlist({
               tenantFactionName={tenantFactionName}
               saving={mutation.isPending}
               canRunBgsAi={canRunBgsAi}
+              canEditLabels={canManageTenantRules}
               alreadyPersonal={alreadyPersonal}
               personalWatchlistFull={personalWatchlist.length >= 100}
               onAddToPersonal={() => {
@@ -2893,11 +2855,12 @@ function GlobalSystemWatchlist({
         onOpenChange={setFilterOpen}
         scope="global"
         filters={filters}
-        sectors={[]}
+        sectors={query.data?.filterOptions.sectors ?? []}
+        projects={query.data?.filterOptions.projects ?? []}
         allegianceOptions={query.data?.filterOptions.allegiances ?? []}
         governmentOptions={query.data?.filterOptions.governments ?? []}
         onApply={(nextFilters) => {
-          setFilters({ ...nextFilters, sector: "" });
+          setFilters(nextFilters);
           setPage(1);
         }}
       />
@@ -3028,7 +2991,7 @@ function ProtectedFactionsSystemWatchlist({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = total ? (page - 1) * pageSize + 1 : 0;
   const rangeEnd = Math.min(page * pageSize, total);
-  const filterCount = activeFilterCount(filters, "protected");
+  const filterCount = activeFilterCount(filters);
   const ruleSystems = [
     ...new Set([
       ...personalWatchlist.map((entry) => entry.system),
@@ -3215,8 +3178,8 @@ function ProtectedFactionsSystemWatchlist({
         {(query.data?.systems ?? []).map((system) => {
           const entry: SystemWatchlistEntry = {
             system: system.requestedSystem || system.name,
-            sector: "",
-            projectName: "",
+            sector: system.sector ?? "",
+            projectName: system.projectName ?? "",
             favorite: false,
           };
           const alreadyPersonal = personalSystems.has(
@@ -3232,6 +3195,7 @@ function ProtectedFactionsSystemWatchlist({
               presenceFactionNames={presenceFactionNames}
               saving={mutation.isPending}
               canRunBgsAi={canRunBgsAi}
+              canEditLabels={canManageTenantRules}
               alreadyPersonal={alreadyPersonal}
               personalWatchlistFull={personalWatchlist.length >= 100}
               onAddToPersonal={() => {
@@ -3287,11 +3251,12 @@ function ProtectedFactionsSystemWatchlist({
         onOpenChange={setFilterOpen}
         scope="protected"
         filters={filters}
-        sectors={[]}
+        sectors={query.data?.filterOptions.sectors ?? []}
+        projects={query.data?.filterOptions.projects ?? []}
         allegianceOptions={query.data?.filterOptions.allegiances ?? []}
         governmentOptions={query.data?.filterOptions.governments ?? []}
         onApply={(nextFilters) => {
-          setFilters({ ...nextFilters, sector: "" });
+          setFilters(nextFilters);
           setPage(1);
         }}
       />

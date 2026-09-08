@@ -95,8 +95,12 @@ export function BgsRuleManager({
   });
   const deleteMutation = useMutation({
     mutationFn: deleteRule,
-    onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: ["bgs-rules"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["bgs-rules"] }),
+        queryClient.invalidateQueries({ queryKey: ["bgs-rule-catalog"] }),
+      ]);
+    },
   });
 
   const visible = useMemo(
@@ -161,7 +165,8 @@ export function BgsRuleManager({
             <div>
               <Dialog.Title>BGS alert rules</Dialog.Title>
               <Dialog.Description>
-                Evaluate settled snapshots and persist edge-triggered alerts.
+                Compare available settled snapshots, even across several days.
+                Alerts are created when a condition is newly met.
               </Dialog.Description>
             </div>
             <Dialog.Close aria-label="Close rules">

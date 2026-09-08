@@ -23,7 +23,13 @@ export default async function FeaturePage({
         canRunBgsAi={session.capabilities.includes("bgs-ai:run")}
       />
     );
-  if (area === "intelligence" && slug === "alerts") return <BgsAlerts />;
+  if (area === "intelligence" && slug === "alerts")
+    return (
+      <BgsAlerts
+        canSendDiscord={session.capabilities.includes("reports:send")}
+        canRunBgsAi={session.capabilities.includes("bgs-ai:run")}
+      />
+    );
   const spec = findFeature(area, slug);
   if (!spec) notFound();
   return <FeatureDashboard key={spec.key} spec={spec} session={session} />;

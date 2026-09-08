@@ -12,6 +12,8 @@ import { flaskRequest } from "@/lib/flask";
 import { AccessError, requireDashboardSession } from "@/lib/session";
 import { humanizeBgsValue } from "@/lib/system-watchlist";
 
+import { loadWatchlistLabels } from "@/lib/watchlist-labels-store";
+
 export const runtime = "nodejs";
 
 type RecordValue = Record<string, unknown>;
@@ -244,6 +246,7 @@ export async function GET(request: Request) {
       );
 
     const session = await requireDashboardSession();
+    const labels = await loadWatchlistLabels(session.tenant.id);
     const protectedFactions = await loadProtectedFactions(request, session);
     const selectedFaction =
       selectedFactionId === null
@@ -267,6 +270,8 @@ export async function GET(request: Request) {
     let systemNames: string[] = [];
     let allegiances: GlobalWatchlistFilterOption[] = [];
     let governments: GlobalWatchlistFilterOption[] = [];
+    let sectors: string[] = [];
+    let projects: string[] = [];
     try {
       database.pragma("query_only = ON");
       database.pragma("busy_timeout = 5000");
@@ -276,6 +281,17 @@ export async function GET(request: Request) {
           ? [selectedFaction.name]
           : protectedFactions.map((faction) => faction.name),
       );
+      for (const row of index) {
+        const label = labels.get(row.system_name.toLocaleLowerCase("en"));
+        row.sector = label?.sector ?? "";
+        row.project_name = label?.projectName ?? "";
+      }
+      sectors = [
+        ...new Set(index.map((row) => row.sector ?? "").filter(Boolean)),
+      ].sort();
+      projects = [
+        ...new Set(index.map((row) => row.project_name ?? "").filter(Boolean)),
+      ].sort();
       const filtered = filterAndSortGlobalSystems(index, parsed.data);
       total = filtered.length;
       const pageStart = (parsed.data.page - 1) * globalWatchlistPageSize;
@@ -329,14 +345,19 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        data,
+        data: data.map((item) => ({
+          ...record(item),
+          watchlist_labels: labels.get(
+            rawSystemName(item).toLocaleLowerCase("en"),
+          ) ?? { sector: "", projectName: "" },
+        })),
         generated_at: generatedAt,
         pagination: {
           page: parsed.data.page,
           page_size: globalWatchlistPageSize,
           total,
         },
-        filter_options: { allegiances, governments },
+        filter_options: { allegiances, governments, sectors, projects },
         protected_factions: protectedFactions,
         selected_protected_faction_id: selectedFactionId,
       },

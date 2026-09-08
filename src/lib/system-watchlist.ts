@@ -50,6 +50,7 @@ export interface InfluenceHistoryPoint {
 }
 
 export interface WatchedFaction {
+  influenceKnown?: boolean;
   name: string;
   government: string;
   allegiance: string;
@@ -67,6 +68,8 @@ export interface WatchedConflict {
 }
 
 export interface WatchedSystem {
+  sector?: string;
+  projectName?: string;
   requestedSystem: string;
   available: boolean;
   name: string;
@@ -83,6 +86,7 @@ export interface WatchedSystem {
 }
 
 export interface WatchlistFilters {
+  projectName: string;
   system: string;
   controllingFaction: string;
   populationMin: string;
@@ -95,6 +99,7 @@ export interface WatchlistFilters {
 }
 
 export const emptyWatchlistFilters: WatchlistFilters = {
+  projectName: "",
   system: "",
   controllingFaction: "",
   populationMin: "",
@@ -147,6 +152,8 @@ export function matchesWatchlistFilters(
   )
     return false;
   if (filters.sector && entry.sector !== filters.sector) return false;
+  if (filters.projectName && entry.projectName !== filters.projectName)
+    return false;
   if (filters.allegiance && system?.allegiance !== filters.allegiance)
     return false;
   if (filters.government && system?.government !== filters.government)
@@ -625,9 +632,8 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
           name.localeCompare(controllingFaction, "en", {
             sensitivity: "base",
           }) === 0;
-        const currentInfluence = percentage(
-          faction.influence ?? faction.Influence,
-        );
+        const rawInfluence = faction.influence ?? faction.Influence;
+        const currentInfluence = percentage(rawInfluence);
         const history = historyByFaction.get(name) ?? [];
         if (
           currentInfluence > 0 &&
@@ -671,6 +677,11 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
             faction.pending_states ?? faction.pendingStates,
           ),
           influence: currentInfluence,
+          ...(rawInfluence == null ||
+          rawInfluence === "" ||
+          !Number.isFinite(Number(rawInfluence))
+            ? { influenceKnown: false }
+            : {}),
           history,
         };
       })
@@ -697,6 +708,8 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
     );
     return {
       requestedSystem,
+      sector: text(row(entry.watchlist_labels).sector),
+      projectName: text(row(entry.watchlist_labels).projectName),
       available: entry.available !== false && Boolean(info.system_name),
       name: text(info.system_name ?? info.name ?? requestedSystem),
       controllingFaction,

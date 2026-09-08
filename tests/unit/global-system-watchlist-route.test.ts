@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   requireDashboardSession: vi.fn(),
   getTenantById: vi.fn(),
   flaskRequest: vi.fn(),
+  labels: new Map(),
+  systemNames: ["Alpha", "Beta"],
 }));
 
 vi.mock("better-sqlite3", () => ({
@@ -23,7 +25,7 @@ vi.mock("better-sqlite3", () => ({
         all: (...parameters: unknown[]) => {
           mocks.prepared.push({ sql, parameters });
           if (sql.startsWith("SELECT DISTINCT system_name FROM eddn_faction"))
-            return [{ system_name: "Alpha" }, { system_name: "Beta" }];
+            return mocks.systemNames.map((system_name) => ({ system_name }));
           return [
             {
               system_name: "Beta",
@@ -66,9 +68,14 @@ vi.mock("@/lib/flask", () => ({
 }));
 
 import { GET } from "@/app/api/system-watchlist/global/route";
+vi.mock("@/lib/watchlist-labels-store", () => ({
+  loadWatchlistLabels: async () => mocks.labels,
+}));
 
 describe("global system watchlist route", () => {
   beforeEach(() => {
+    mocks.labels = new Map();
+    mocks.systemNames = ["Alpha", "Beta"];
     process.env.VALK_EDDN_DATABASE = "C:/shared/bgs_data_eddn.db";
     mocks.databasePath = "";
     mocks.prepared.length = 0;
@@ -138,6 +145,8 @@ describe("global system watchlist route", () => {
       total: 2,
     });
     expect(payload.filter_options).toEqual({
+      sectors: [],
+      projects: [],
       allegiances: [
         { value: "Empire", label: "Empire" },
         { value: "Independent", label: "Independent" },
@@ -163,5 +172,33 @@ describe("global system watchlist route", () => {
     expect(response.status).toBe(400);
     expect(mocks.requireDashboardSession).not.toHaveBeenCalled();
     expect(mocks.databasePath).toBe("");
+  });
+
+  it("filters labels across the complete index before pagination", async () => {
+    mocks.systemNames = [
+      ...Array.from({ length: 30 }, (_, i) => `Alpha ${i}`),
+      "Zeta",
+    ];
+    mocks.labels.set("zeta", {
+      system: "Zeta",
+      sector: "Outer Rim",
+      projectName: "Harbor",
+    });
+    const response = await GET(
+      new Request(
+        "https://dashboard.test/api/system-watchlist/global?sector=Outer%20Rim&project_name=Harbor",
+      ),
+    );
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(payload.pagination.total).toBe(1);
+    expect(payload.data[0]).toMatchObject({
+      requested_system: "Zeta",
+      watchlist_labels: { sector: "Outer Rim", projectName: "Harbor" },
+    });
+    expect(payload.filter_options).toMatchObject({
+      sectors: ["Outer Rim"],
+      projects: ["Harbor"],
+    });
   });
 });

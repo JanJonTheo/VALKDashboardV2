@@ -167,6 +167,94 @@ describe("BGS rule catalog", () => {
     queryClient.clear();
   });
 
+  it("shows an empty global assignment as missing rules and can restore it", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        data: [
+          {
+            ...template,
+            packages: [
+              {
+                id: "empty-global",
+                template_id: template.id,
+                template_version: 1,
+                owner_scope: "tenant",
+                watchlist_scope: "global",
+                rules: [],
+                personal_discord: false,
+                tenant_discord: false,
+              },
+            ],
+          },
+        ],
+        discord_availability: { personal: false, global: false },
+      }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BgsRuleCatalog canManageTenant />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("global · no rules");
+    expect(screen.queryByText("global applied")).not.toBeInTheDocument();
+    fetchMock.mockImplementation(
+      async (_input: RequestInfo | URL, init?: RequestInit) =>
+        init?.method === "POST"
+          ? Response.json({ data: { id: "empty-global" }, restored: true })
+          : Response.json({ data: [], discord_availability: {} }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore rules" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/bgs-rule-templates/${template.id}/apply`,
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"watchlist_scope":"global"'),
+        }),
+      ),
+    );
+    queryClient.clear();
+  });
+
+  it("does not offer global package restoration to a member", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({
+        data: [
+          {
+            ...template,
+            packages: [
+              {
+                id: "empty-global",
+                template_id: template.id,
+                template_version: 1,
+                owner_scope: "tenant",
+                watchlist_scope: "global",
+                rules: [],
+              },
+            ],
+          },
+        ],
+        discord_availability: {},
+      }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BgsRuleCatalog canManageTenant={false} />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("global · no rules");
+    expect(
+      screen.queryByRole("button", { name: "Restore rules" }),
+    ).not.toBeInTheDocument();
+    queryClient.clear();
+  });
+
   it("applies the protected template to the selected faction webhook", async () => {
     fetchMock.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {

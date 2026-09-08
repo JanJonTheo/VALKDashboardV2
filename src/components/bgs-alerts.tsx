@@ -8,7 +8,17 @@ import {
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { SystemLinksMenu } from "@/components/watchlist-system-actions";
+import {
+  AlertSystemDetails,
+  AlertSystemMap,
+} from "@/components/alert-system-details";
+import { AlertDiscordButton } from "@/components/alert-discord-button";
+import { AlertSystemStrip } from "@/components/alert-system-strip";
+import { useAlertSystems } from "@/lib/use-alert-systems";
+import { alertContext } from "@/lib/alert-context";
+import type { BgsAlert } from "@/lib/bgs-rules";
 import { loadBgsAlerts, type BgsAlertFilters } from "@/lib/bgs-alerts-client";
 import { viewFilterString, type ViewPreference } from "@/lib/preferences";
 import { useStoredViewPreference } from "@/lib/use-view-preference";
@@ -31,7 +41,15 @@ async function updateAlert(
     );
 }
 
-export function BgsAlerts() {
+export function BgsAlerts({
+  canSendDiscord = false,
+  canRunBgsAi = false,
+}: {
+  canSendDiscord?: boolean;
+  canRunBgsAi?: boolean;
+}) {
+  const [detailAlert, setDetailAlert] = useState<BgsAlert | null>(null);
+  const [mapSystem, setMapSystem] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const defaults = useMemo<ViewPreference>(
     () => ({
@@ -57,7 +75,14 @@ export function BgsAlerts() {
   const query = useQuery({
     queryKey: ["bgs-alerts", filters],
     queryFn: () => loadBgsAlerts(filters),
-    refetchInterval: 60_000,
+    refetchInterval: (query) =>
+      query.state.data?.data.some((alert) =>
+        ["pending", "processing", "retry"].includes(
+          alert.discord?.status ?? "",
+        ),
+      )
+        ? 5_000
+        : 60_000,
   });
   const mutation = useMutation({
     mutationFn: ({
@@ -75,6 +100,11 @@ export function BgsAlerts() {
   const systems = [
     ...new Set((query.data?.data ?? []).map((alert) => alert.system_name)),
   ].sort();
+  const {
+    listRef: alertListRef,
+    lookup: currentSystem,
+    failed: systemLoadFailed,
+  } = useAlertSystems(systems);
   return (
     <>
       <PageViewRegistration
@@ -88,7 +118,7 @@ export function BgsAlerts() {
         <div>
           <SavedViewsControl model={savedView} />
           <p className="eyebrow">INTELLIGENCE / BGS ALERTS</p>
-          <h1>Alert centre</h1>
+          <h1>Alert Center</h1>
           <p>
             Persistent personal and tenant-wide signals from settled BGS
             snapshots.
@@ -188,7 +218,11 @@ export function BgsAlerts() {
           </div>
         </div>
       )}
-      <section className="bgs-alert-list" aria-busy={query.isPending}>
+      <section
+        ref={alertListRef}
+        className="bgs-alert-list"
+        aria-busy={query.isPending}
+      >
         {query.isPending && <p className="inline-empty">Loading BGS alerts…</p>}
         {!query.isPending && !query.data?.data.length && (
           <div className="surface watchlist-empty">
@@ -204,9 +238,25 @@ export function BgsAlerts() {
         )}
         {query.data?.data.map((alert) => (
           <article
-            className={`surface bgs-alert-card ${alert.severity}${alert.read_at ? " read" : " unread"}${alert.resolved_at ? " resolved" : ""}`}
+            className={`surface bgs-alert-card compact-alert ${alert.severity}${alert.read_at ? " read" : " unread"}${alert.resolved_at ? " resolved" : ""}`}
+            data-alert-system={alert.system_name}
             key={alert.id}
           >
+            <div className="bgs-alert-system-row">
+              <h2>
+                <button
+                  className="bgs-alert-system-name"
+                  onClick={() => setDetailAlert(alert)}
+                >
+                  {alert.system_name}
+                </button>
+              </h2>
+              <SystemLinksMenu
+                system={alert.system_name}
+                onDetails={() => setDetailAlert(alert)}
+                onMap={() => setMapSystem(alert.system_name)}
+              />
+            </div>
             <header>
               <div>
                 <span className={`severity-pill ${alert.severity}`}>
@@ -223,13 +273,15 @@ export function BgsAlerts() {
               </div>
               <time>{new Date(alert.fired_at).toLocaleString("en-GB")}</time>
             </header>
-            <h2>{alert.title}</h2>
-            <p>{alert.message}</p>
+            <AlertSystemStrip
+              alert={alert}
+              system={currentSystem(alert.system_name)}
+              failed={systemLoadFailed}
+            />
             <footer>
-              <span>
-                {alert.rule_name} · settled tick {alert.fired_ticktime}
-              </span>
+              <span>Current faction values</span>
               <div>
+                {canSendDiscord && <AlertDiscordButton alert={alert} />}
                 {!alert.read_at && (
                   <button
                     className="secondary-button"
@@ -260,6 +312,24 @@ export function BgsAlerts() {
           </article>
         ))}
       </section>
+      {detailAlert && (
+        <AlertSystemDetails
+          key={detailAlert.id}
+          system={detailAlert.system_name}
+          context={alertContext(detailAlert)}
+          onClose={() => setDetailAlert(null)}
+          canRunBgsAi={canRunBgsAi}
+        />
+      )}
+      {mapSystem && (
+        <AlertSystemMap
+          system={mapSystem}
+          open
+          onOpenChange={(open) => {
+            if (!open) setMapSystem(null);
+          }}
+        />
+      )}
     </>
   );
 }

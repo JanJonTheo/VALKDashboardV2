@@ -11,6 +11,70 @@ Die Historie beginnt mit `c11adc9` vom 29.08.2026 und umfasst alle zehn bisher v
 - Dieses Changelog mit der vollständigen bisherigen Änderungshistorie hinzugefügt.
 - Changelog in der README verlinkt.
 
+## 08.09.2026 – Vollständig sichtbare Systemzeile im Alert
+
+Status: am 08.09.2026 um 22:31 MESZ deployt. Release-Kennung: `20260908-alert-row-fix`.
+
+- Die Controller-/Systemzeile hatte nur 16–18 px Platz für 22 px hohe Info-Chips. Sie erhält nun 24 px einschließlich vertikalem Innenabstand. Der zusätzliche Platz wird im Footer ausgeglichen; Gesamthöhe und Fraktionskarten bleiben unverändert.
+- Regressionstest prüft die vollständige vertikale Sichtbarkeit aller Systeminformationen auf Desktop, Tablet und Smartphone. Alle drei Browserprüfungen, Lint und Produktionsbuild einschließlich Typprüfung erfolgreich; öffentliche Health-Prüfung HTTP 200. Kein Backend-Neustart erforderlich.
+
+## 08.09.2026 – Discord-Embeds und Alert Center
+
+Status: am 08.09.2026 um 22:19 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-discord-embeds`.
+
+- Automatische und manuell gesendete BGS-Alarme verwenden dasselbe Discord-Embed: verlinkter Systemtitel, farbiger Schweregrad, Status und deutlich hervorgehobener historischer Alarmwert samt Grenzwert.
+- Nur die zum Alarm gehörenden Fraktionen erscheinen als kompakte Felder mit aktuellen Einflusswerten, Regierung, Zugehörigkeit sowie aktiven und ausstehenden Zuständen. Systemdaten, externe Links und getrennte Zeitangaben ergänzen die Nachricht. Fehlende aktuelle Daten verhindern den Versand nicht.
+- Native Discord-Formatierung mit begrenzten Feldlängen, maskierten Markdown-Daten und deaktivierten Erwähnungen. Bestehende Versandwarteschlange und Wiederholungslogik bleiben erhalten. Bereits versendete Nachrichten werden nicht nachträglich verändert.
+- Dashboardüberschrift auf „Alert Center“ vereinheitlicht.
+- Prüfung: 36 Backendtests mit simuliertem Discord-Versand erfolgreich; Lint und Produktionsbuild einschließlich Typprüfung erfolgreich. Embed für den Live-Alarm in 39 Tauri mit beiden betroffenen Fraktionen geprüft, ohne eine Discord-Nachricht zu versenden.
+- Backend-Sicherung: `/home/valk/dashboard-v2/shared/discord-embeds-backup-20260908/`. Voriges Dashboardrelease bleibt erhalten.
+
+## 08.09.2026 – Kompakte Alert-Streifen mit Fraktionskontext
+
+Status: am 08.09.2026 um 21:58 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-alert-faction-strips`.
+
+- Alert-Karten enthalten Systeminformationen und Fraktionskarten aus denselben UI-Bausteinen wie die Watchlist. Angezeigt werden nur die alarmbezogenen Fraktionen; Einzelfraktionsalarme erhalten keinen künstlichen Vergleichspartner.
+- Alarmkennzahl und Grenzwert sind deutlich hervorgehoben und als Werte bei Auslösung gekennzeichnet. Die Fraktionskarten zeigen aktuelle Daten; die vollständige ursprüngliche Meldung bleibt aufklappbar. Fehlende Einflusswerte erscheinen als „—“.
+- Kompakte feste Kartenhöhen von 244 px auf Desktop/Tablet und 394 px auf Smartphones. Gegen die vorher gemessenen 242,69 bzw. 394,44 px des Beispielalarms geprüft; alle zusätzlichen Informationen passen innerhalb dieser Höhe. Auf kleinen Bildschirmen lassen sich die Fraktionskarten horizontal verschieben.
+- Record Details übernehmen den konkreten Alarmkontext: betroffene Fraktionszeilen erhalten Alarmsymbol und kurze Meldung, zugehörige Verlaufslinien und Legendeneinträge werden hervorgehoben. Andere Fraktionen bleiben sichtbar; die Watchlist öffnet Details weiterhin ohne Alarmmarkierungen.
+- Sichtbare Alert-Systeme werden gemeinsam geladen, doppelte Systeme zusammengefasst und die Ergebnisse mit der Detailansicht geteilt. Neuer sitzungsgeschützter POST für `/api/system-watchlist/detail` mit maximal 100 Systemen; keine Backend- oder Datenbankschemaänderung.
+- Prüfung: 168 Unit-Testfälle sowie 21 Browserprüfungen erfolgreich. Zwei bestehende Unit-Tests überschritten im parallelen Lauf ihr Zeitlimit und bestanden bei Einzelprüfung. Kartenhöhe, Tastaturzugriff, Fraktionsauswahl und unterschiedliche Alarme desselben Systems auf Desktop/Tablet/Smartphone geprüft; Typprüfung, Lint und Produktionsbuild erfolgreich.
+- Live mit bestehender jjt-Sitzung geprüft: Systemdaten und Batch-Abfrage erfolgreich, beide Fraktionen des Alarms mit gespeichertem Abstand 1,87 pp korrekt zugeordnet. Keine Discord-Testmeldung gesendet; vorheriges Release bleibt erhalten.
+
+## 08.09.2026 – Alert-Systemdetails und einzelner Discord-Versand
+
+Status: am 08.09.2026 um 21:06 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-alert-actions`.
+
+- Jede Alert-Karte beginnt mit dem goldfarben hervorgehobenen, anklickbaren Systemnamen. Der Klick öffnet dieselben Record Details wie in der Watchlist rechts als Seitenfenster, einschließlich Influence-Verlauf. Systemdaten werden erst beim Öffnen geladen, unabhängig von der persönlichen Watchlist.
+- Dropdown pro Alert für Raven Colonial, Inara, Spansh, EDGIS und Record Details ergänzt. Lange Systemnamen umbrechen auf kleinen Bildschirmen vollständig.
+- Leadership und Admins können genau einen sichtbaren Alarm an den BGS-Channel des Mandanten senden, auch eigene persönliche Alarme. Bewusstes erneutes Senden ist möglich; eindeutige Request-Kennungen und atomare Warteschlangeneinträge verhindern doppelte Aufträge durch Doppelklicks und Anfragewiederholungen.
+- Versandstatus, letzter erfolgreicher Versand und Fehler werden angezeigt. Laufende Zustellungen werden alle fünf Sekunden aktualisiert. Discord-Nachrichten enthalten System, Alarmtext, Schweregrad, Zeitangaben und Status; Lesestatus und Bestätigung bleiben unverändert.
+- Prüfung: 31 Backend-Tests, 160 Dashboard-Unit-Tests und 18 Browserprüfungen für Alerts und Watchlists auf Desktop/Tablet/Smartphone erfolgreich. Typprüfung, Lint und Produktionsbuild erfolgreich. Discord-Zustellung und Wiederholung wurden mit simulierten Antworten geprüft.
+- Live mit vorhandener jjt-Sitzung geprüft: Alert-Metadaten, konfigurierter BGS-Webhook und Systemdetails erfolgreich; ungültiger Versandrequest HTTP 400, ohne Nachricht zu erzeugen. Die vorübergehende EDDN-Datenbanksperre durch die automatische Startwartung war beim abschließenden Test aufgehoben.
+- Sicherung von Backend-Dateien und Mandantendatenbank: `/home/valk/dashboard-v2/shared/alert-actions-backup-20260908/`. Voriges Dashboardrelease bleibt erhalten.
+
+## 08.09.2026 – Watchlist-Sektoren, Projekte und externe Systemlinks
+
+Status: am 08.09.2026 um 20:31 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-watchlist-labels-links`.
+
+- Sektor und Projektname lassen sich über das Stiftsymbol direkt am System bearbeiten. Persönliche Angaben bleiben benutzerspezifisch; globale und geschützte Watchlists teilen mandantenspezifische Zuordnungen, die Leadership und Admins bearbeiten können.
+- Sektor- und Projektfilter stehen in allen drei Watchlists zur Verfügung. Gemeinsame Filteroptionen stammen aus dem vollständigen Systembestand; die Filterung erfolgt vor der Seitenauswahl.
+- Jeder Systemstreifen enthält ein Dropdown für Raven Colonial, Inara und Spansh. Spansh wird beim Öffnen über den vorhandenen Systemcache aufgelöst. Die zusätzliche Schaltfläche „Open Full System Information“ entfällt, „Record Details“ bleibt erhalten.
+- Auf Smartphones stehen die Aktionen unter den Systemangaben, damit Systemname, Sektor und Projekt lesbar bleiben.
+- Prüfung: 157 Unit-Tests und 32 Browserprüfungen erfolgreich (vier bildschirmabhängige Prüfungen planmäßig übersprungen), einschließlich Bearbeitung, Filterung und Dialog-Barrierefreiheit auf Desktop, Tablet und Smartphone. Typprüfung, Lint und Produktionsbuild erfolgreich. Öffentlicher Healthcheck HTTP 200, neue Endpunkte ohne Sitzung HTTP 401.
+
+## 08.09.2026 – BGS-Paketzuordnungen und Auswertung lückenhafter Snapshots
+
+Status: am 08.09.2026 um 20:01 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-bgs-alert-repair`.
+
+- Katalogregeln vergleichen die letzten verfügbaren abgeschlossenen Snapshots je System, auch über mehrere Tage hinweg. Fensterbasierte Regeln akzeptieren ältere Vergleichsdaten und nennen die tatsächliche Zeitspanne.
+- Später eintreffende oder korrigierte Snapshots werden erneut ausgewertet; eindeutige Alarmkennungen verhindern Duplikate. Die Start-Baseline neuer Pakete bleibt erhalten.
+- Leere Katalogpakete werden als „no rules“ angezeigt und können wiederhergestellt werden. Beim Löschen der letzten Paketregel entfernt das Backend die leere Zuordnung; der Katalog wird aktualisiert.
+- Reparaturskript mit lesender Vorschau und verpflichtender Sicherung ergänzt. Zwei leere Mandantenpakete mit insgesamt acht Regeln sowie der weiterhin aktive persönliche Abstandsalarm für „Preae Aihm DN-I c23-44“ wurden wiederhergestellt, ohne historische Discord-Nachrichten nachzusenden.
+- Prüfung: 28 Backend-Tests, 148 Dashboard-Unit-Tests, neun Browserprüfungen auf Desktop/Tablet/Smartphone, Typprüfung und Lint der geänderten TypeScript-Dateien. Lokaler Turbopack-Build und Serverbuild mit Webpack erfolgreich. Der Reparaturlauf wurde zweimal auf einer Datenbankkopie auf Duplikatfreiheit geprüft.
+- Live-Auswertung: zwölf Regeln und 6.828 Regel/System-Kombinationen geprüft. Für das Beispielsystem sind alle persönlichen und globalen Auswertungsstände „ok“; der rekonstruierte Alarm ist aktiv. Öffentlicher Healthcheck erfolgreich, Regelzugriff ohne Sitzung weiterhin HTTP 401.
+- Sicherung von Backend-Dateien und Mandantendatenbank: `/home/valk/dashboard-v2/shared/bgs-repair-20260908/`. Das bisherige Dashboard-Release bleibt für einen Rollback erhalten.
+
 ## 03.09.2026 – Einheitliche Evaluations-Details und periodenabhängige Discord-Berichte
 
 Status: am 03.09.2026 um 10:59 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260903-104316-evaluation-details-discord-period`.

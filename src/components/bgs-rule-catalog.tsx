@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  AlertTriangle,
   BookOpen,
   CheckCircle2,
   Pencil,
@@ -428,6 +429,11 @@ export function BgsRuleCatalog({
               {packages.map((item) => {
                 const updateAvailable =
                   item.template_version < template.version;
+                const empty = item.rules.length === 0;
+                const packageLabel =
+                  item.watchlist_scope === "protected"
+                    ? (item.protected_faction?.name ?? "Unavailable faction")
+                    : item.watchlist_scope;
                 return (
                   <div className="bgs-package-row" key={item.id}>
                     <button
@@ -438,11 +444,35 @@ export function BgsRuleCatalog({
                         )
                       }
                     >
-                      <CheckCircle2 size={14} />{" "}
-                      {item.watchlist_scope === "protected"
-                        ? `${item.protected_faction?.name ?? "Unavailable faction"} applied`
-                        : `${item.watchlist_scope} applied`}
+                      {empty ? (
+                        <AlertTriangle size={14} />
+                      ) : (
+                        <CheckCircle2 size={14} />
+                      )}{" "}
+                      {packageLabel}
+                      {empty ? " · no rules" : " applied"}
                     </button>
+                    {empty &&
+                      !template.archived &&
+                      (item.owner_scope === "personal" || canManageTenant) && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={applyMutation.isPending}
+                          onClick={() =>
+                            applyMutation.mutate({
+                              templateId: template.id,
+                              watchlistScope: item.watchlist_scope,
+                              protectedFactionId:
+                                item.protected_faction_id ?? undefined,
+                              discord:
+                                item.personal_discord || item.tenant_discord,
+                            })
+                          }
+                        >
+                          <RotateCcw size={13} /> Restore rules
+                        </button>
+                      )}
                     {updateAvailable && (
                       <button
                         type="button"
@@ -617,8 +647,10 @@ export function BgsRuleCatalog({
             {selectedTemplate &&
               packageFor(selectedTemplate, scope, protectedFactionId) && (
                 <p className="inline-empty">
-                  This template is already applied. Continue to open the
-                  existing package.
+                  {packageFor(selectedTemplate, scope, protectedFactionId)
+                    ?.rules.length
+                    ? "This template is already applied. Continue to open the existing package."
+                    : "This package has no rules. Continue to restore its rules from the catalog."}
                 </p>
               )}
             <footer>
@@ -642,7 +674,10 @@ export function BgsRuleCatalog({
               >
                 {selectedTemplate &&
                 packageFor(selectedTemplate, scope, protectedFactionId)
-                  ? "Open package"
+                  ? packageFor(selectedTemplate, scope, protectedFactionId)
+                      ?.rules.length
+                    ? "Open package"
+                    : "Restore rules"
                   : "Apply package"}
               </button>
             </footer>

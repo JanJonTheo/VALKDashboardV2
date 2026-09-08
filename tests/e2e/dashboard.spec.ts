@@ -331,10 +331,10 @@ test("BGS alert centre exposes persistent alert state", async ({ page }) => {
   });
   await page.goto("/intelligence/alerts");
   await expect(
-    page.getByRole("heading", { name: "Alert centre" }),
+    page.getByRole("heading", { name: "Alert Center" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Controller guard · HIP 91987" }),
+    page.getByRole("button", { name: "HIP 91987", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Acknowledge" }).click();
   const results = await new AxeBuilder({ page }).analyze();

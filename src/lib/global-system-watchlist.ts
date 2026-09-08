@@ -32,6 +32,8 @@ export const globalWatchlistQuerySchema = z
       .default("system"),
     direction: z.enum(["asc", "desc"]).default("asc"),
     system: z.string().trim().max(255).default(""),
+    sector: z.string().trim().max(80).default(""),
+    project_name: z.string().trim().max(160).default(""),
     controlling_faction: z.string().trim().max(255).default(""),
     population_min: optionalNumber,
     population_max: optionalNumber,
@@ -72,6 +74,8 @@ export interface GlobalWatchlistFilterOption {
 }
 
 export interface GlobalSystemIndexRow {
+  sector?: string;
+  project_name?: string;
   system_name: string;
   population: number | null;
   updated_at: string;
@@ -115,6 +119,13 @@ export function filterAndSortGlobalSystems(
   const allegiance = folded(query.allegiance);
   const government = folded(query.government);
   const filtered = rows.filter((row) => {
+    if (query.sector && folded(row.sector ?? "") !== folded(query.sector))
+      return false;
+    if (
+      query.project_name &&
+      folded(row.project_name ?? "") !== folded(query.project_name)
+    )
+      return false;
     if (systemNeedle && !folded(row.system_name).includes(systemNeedle))
       return false;
     if (

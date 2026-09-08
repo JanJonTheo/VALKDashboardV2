@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   closed: false,
   requireDashboardSession: vi.fn(),
   flaskRequest: vi.fn(),
+  labels: new Map(),
 }));
 
 vi.mock("better-sqlite3", () => ({
@@ -54,6 +55,9 @@ vi.mock("better-sqlite3", () => ({
     }
   },
 }));
+vi.mock("@/lib/watchlist-labels-store", () => ({
+  loadWatchlistLabels: async () => mocks.labels,
+}));
 
 vi.mock("@/lib/session", () => ({
   AccessError: class AccessError extends Error {
@@ -67,6 +71,7 @@ import { GET } from "@/app/api/system-watchlist/protected/route";
 
 describe("protected system watchlist route", () => {
   beforeEach(() => {
+    mocks.labels = new Map();
     process.env.VALK_EDDN_DATABASE = "C:/shared/bgs_data_eddn.db";
     mocks.databasePath = "";
     mocks.prepared.length = 0;
@@ -168,5 +173,25 @@ describe("protected system watchlist route", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.requireDashboardSession).not.toHaveBeenCalled();
+  });
+
+  it("uses the shared sector and project filters for protected systems", async () => {
+    mocks.labels.set("beta", {
+      system: "Beta",
+      sector: "West",
+      projectName: "Relay",
+    });
+    const response = await GET(
+      new Request(
+        "https://dashboard.test/api/system-watchlist/protected?sector=West&project_name=Relay",
+      ),
+    );
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(payload.pagination.total).toBe(1);
+    expect(payload.data[0]).toMatchObject({
+      requested_system: "Beta",
+      watchlist_labels: { sector: "West", projectName: "Relay" },
+    });
   });
 });
