@@ -24,7 +24,7 @@ import {
   ListChecks,
   X,
 } from "lucide-react";
-import Image from "next/image";
+import { TenantLogo } from "@/components/tenant-logo";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -162,13 +162,7 @@ export function AppShell({
       <aside className={cn("app-sidebar", menuOpen && "open")}>
         <div className="brand sidebar-brand">
           <span className="brand-signet sidebar-signet">
-            <Image
-              src="/valkyries-trade-war.jpg"
-              alt="Valkyries of Trade & War"
-              width={200}
-              height={200}
-              priority
-            />
+            <TenantLogo key={session.tenant.id} tenant={session.tenant} />
           </span>
           <button
             className="sidebar-close"

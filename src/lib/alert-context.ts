@@ -57,7 +57,7 @@ export function alertContext(alert: BgsAlert): AlertContext {
     threshold = limit === null ? "" : `Threshold ${pp(limit)}`;
   } else if (conflict && text(conflict.faction1) && text(conflict.faction2)) {
     factions = [text(conflict.faction1), text(conflict.faction2)];
-    summary = `New conflict: ${text(conflict.type) || text(conflict.war_type) || "Conflict"}`;
+    summary = `${conflict.is_update ? "Conflict update" : "New conflict"}: ${text(conflict.type) || text(conflict.war_type) || "Conflict"}`;
   } else if (number(f.loss_pp) !== null && principal) {
     factions = [principal];
     summary = `Loss ${pp(number(f.loss_pp)!)}`;

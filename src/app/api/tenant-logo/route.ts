@@ -28,7 +28,8 @@ export async function GET() {
         return new Response(new Uint8Array(data), {
           headers: {
             "content-type": mime,
-            "cache-control": "private, max-age=3600",
+            "cache-control": "private, no-store",
+            vary: "Cookie",
             "x-content-type-options": "nosniff",
           },
         });

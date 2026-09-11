@@ -66,8 +66,9 @@ export const bgsRuleConditionOptions: Array<{
   },
   {
     value: "tenant_faction_new_conflict",
-    label: "Tenant faction enters a conflict",
-    description: "The tenant faction enters a new Election or War.",
+    label: "Tenant faction conflicts & tick updates",
+    description:
+      "New conflicts and one update per settled system tick, including won days and stakes for both factions.",
     usesWindow: false,
   },
   {
@@ -238,6 +239,7 @@ export interface BgsRuleCatalogPayload {
 }
 
 export interface BgsAlert {
+  can_manage?: boolean;
   discord?: {
     configured: boolean;
     status: string | null;

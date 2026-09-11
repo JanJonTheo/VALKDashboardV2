@@ -551,6 +551,40 @@ paths:
                   unread_count: { type: integer, minimum: 0 }
                   generated_at: { type: string, format: date-time }
         default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/alerts/{alert_id}:
+    delete:
+      operationId: deleteBgsAlert
+      description: Permanently delete an owned personal alert or, for admins, a tenant-wide alert. Suppresses recreation of the same event and tick.
+      security: [{ dashboardBearer: [] }]
+      x-capability: dashboard:read
+      parameters:
+        - {
+            name: alert_id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        "200":
+          { description: Alert and dependent delivery and user states deleted }
+        default: { $ref: "#/components/responses/ErrorResponse" }
+  /dashboard/bgs/alerts/{alert_id}/resolve:
+    post:
+      operationId: resolveBgsAlert
+      description: Owner or tenant admin marks the alert resolved. Repeating preserves the original resolution time. Resolved alerts expire after ten days.
+      security: [{ dashboardBearer: [] }]
+      x-capability: dashboard:read
+      parameters:
+        - {
+            name: alert_id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        "200":
+          { description: Alert resolved and unclaimed deliveries cancelled }
+        default: { $ref: "#/components/responses/ErrorResponse" }
   /dashboard/bgs/alerts/{alert_id}/state:
     patch:
       operationId: updateBgsAlertState
@@ -1352,6 +1386,11 @@ components:
         resolved_at: { type: [string, "null"], format: date-time }
         read_at: { type: [string, "null"], format: date-time }
         acknowledged_at: { type: [string, "null"], format: date-time }
+        can_manage:
+          {
+            type: boolean,
+            description: Whether the current user may resolve or delete this alert,
+          }
     BgsAiReport:
       type: object
       required:

@@ -1,4 +1,5 @@
 "use client";
+import { ConflictDetails } from "@/components/conflict-details";
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1411,31 +1412,7 @@ export function SystemRecordDetail({
               </table>
             </div>
           </section>
-          {system.conflicts.length > 0 && (
-            <section className="watch-conflict-detail">
-              <header>
-                <Swords size={15} aria-hidden="true" />
-                <h3>Current conflicts</h3>
-              </header>
-              <div>
-                {system.conflicts.map((conflict, index) => (
-                  <article
-                    key={`${conflict.faction1}-${conflict.faction2}-${index}`}
-                  >
-                    <strong>
-                      {conflict.faction1 || "Unknown faction"} vs.{" "}
-                      {conflict.faction2 || "Unknown faction"}
-                    </strong>
-                    <span>
-                      {[conflict.type, conflict.status]
-                        .filter(Boolean)
-                        .join(" · ") || "Conflict"}
-                    </span>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
+          <ConflictDetails conflicts={system.conflicts} />
           <section className="watch-history-detail">
             <header>
               <div>
@@ -1838,6 +1815,7 @@ export function SystemStrip({
           onActive={setActiveFaction}
         />
       )}
+      <ConflictDetails conflicts={system.conflicts} />
       <SystemRecordDetail
         system={system}
         open={detailOpen}

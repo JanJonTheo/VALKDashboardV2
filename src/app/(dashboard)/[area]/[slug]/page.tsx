@@ -26,6 +26,7 @@ export default async function FeaturePage({
   if (area === "intelligence" && slug === "alerts")
     return (
       <BgsAlerts
+        isAdmin={session.role === "admin"}
         canSendDiscord={session.capabilities.includes("reports:send")}
         canRunBgsAi={session.capabilities.includes("bgs-ai:run")}
       />

@@ -1,4 +1,6 @@
 "use client";
+import { ConflictDetails } from "@/components/conflict-details";
+import { normalizeConflict } from "@/lib/system-watchlist";
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -2277,21 +2279,7 @@ function SystemDetails({
       <section>
         <h3>Conflicts</h3>
         {conflicts.length ? (
-          <div className="system-detail-rows">
-            {conflicts.map((conflict, index) => (
-              <div key={String(conflict.id ?? index)}>
-                <strong>
-                  {formatValue(conflict.faction1)} vs.{" "}
-                  {formatValue(conflict.faction2)}
-                </strong>
-                <span>{formatValue(conflict.war_type)}</span>
-                <b>
-                  {formatValue(conflict.won_days1)}–
-                  {formatValue(conflict.won_days2)}
-                </b>
-              </div>
-            ))}
-          </div>
+          <ConflictDetails conflicts={conflicts.map(normalizeConflict)} />
         ) : (
           <p>No active conflicts reported.</p>
         )}

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Plus, Save, Trash2, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { Role } from "@/lib/access";
+import { RolePermissionsHelp } from "@/components/role-permissions-help";
 
 interface ManagedUser {
   id: string;
@@ -88,6 +89,7 @@ export function UserAdministration({
           </p>
         </div>
         <div>
+          <RolePermissionsHelp />
           <button
             className="primary-button"
             onClick={() => setCreateOpen(true)}

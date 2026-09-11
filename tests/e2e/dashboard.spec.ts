@@ -336,7 +336,8 @@ test("BGS alert centre exposes persistent alert state", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "HIP 91987", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Acknowledge" }).click();
+  await expect(page.getByRole("button", { name: "Acknowledge" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Mark read", exact: true }).click();
   const results = await new AxeBuilder({ page }).analyze();
   expect(
     results.violations.filter((item) =>

@@ -1,13 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  BellRing,
-  Check,
-  CheckCheck,
-  RefreshCw,
-  ShieldAlert,
-} from "lucide-react";
+import { BellRing, Check, RefreshCw, ShieldAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 import { SystemLinksMenu } from "@/components/watchlist-system-actions";
 import {
@@ -15,6 +9,7 @@ import {
   AlertSystemMap,
 } from "@/components/alert-system-details";
 import { AlertDiscordButton } from "@/components/alert-discord-button";
+import { AlertLifecycleActions } from "@/components/alert-lifecycle-actions";
 import { AlertSystemStrip } from "@/components/alert-system-strip";
 import { useAlertSystems } from "@/lib/use-alert-systems";
 import { alertContext } from "@/lib/alert-context";
@@ -24,11 +19,9 @@ import { viewFilterString, type ViewPreference } from "@/lib/preferences";
 import { useStoredViewPreference } from "@/lib/use-view-preference";
 import { PageViewRegistration } from "@/components/page-view-context";
 import { SavedViewsControl } from "@/components/saved-views-control";
+import { MarkAllAlertsRead } from "@/components/mark-all-alerts-read";
 
-async function updateAlert(
-  id: string,
-  state: { read?: boolean; acknowledged?: boolean },
-) {
+async function updateAlert(id: string, state: { read?: boolean }) {
   const response = await fetch(`/api/bgs-alerts/${id}/state`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -44,12 +37,15 @@ async function updateAlert(
 export function BgsAlerts({
   canSendDiscord = false,
   canRunBgsAi = false,
+  isAdmin = false,
 }: {
   canSendDiscord?: boolean;
   canRunBgsAi?: boolean;
+  isAdmin?: boolean;
 }) {
   const [detailAlert, setDetailAlert] = useState<BgsAlert | null>(null);
   const [mapSystem, setMapSystem] = useState<string | null>(null);
+  const [markedCount, setMarkedCount] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const defaults = useMemo<ViewPreference>(
     () => ({
@@ -85,13 +81,8 @@ export function BgsAlerts({
         : 60_000,
   });
   const mutation = useMutation({
-    mutationFn: ({
-      id,
-      state,
-    }: {
-      id: string;
-      state: { read?: boolean; acknowledged?: boolean };
-    }) => updateAlert(id, state),
+    mutationFn: ({ id, state }: { id: string; state: { read?: boolean } }) =>
+      updateAlert(id, state),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["bgs-alerts"] });
       window.dispatchEvent(new CustomEvent("valk:alerts-updated"));
@@ -116,15 +107,14 @@ export function BgsAlerts({
       />
       <header className="page-header">
         <div>
-          <SavedViewsControl model={savedView} />
           <p className="eyebrow">INTELLIGENCE / BGS ALERTS</p>
           <h1>Alert Center</h1>
           <p>
             Persistent personal and tenant-wide signals from settled BGS
-            snapshots.
+            snapshots. Resolved alerts are automatically deleted after 10 days.
           </p>
         </div>
-        <div>
+        <div className="bgs-alert-header-actions">
           <span className="live-status">
             <i /> 60s refresh
           </span>
@@ -136,12 +126,22 @@ export function BgsAlerts({
             <RefreshCw className={query.isFetching ? "spin" : ""} size={15} />{" "}
             Refresh
           </button>
+          <MarkAllAlertsRead isAdmin={isAdmin} onMarked={setMarkedCount} />
+          <SavedViewsControl model={savedView} />
         </div>
       </header>
       <section className="surface bgs-alert-toolbar">
-        <div className="watchlist-summary">
-          <strong>{query.data?.unread_count ?? 0}</strong>
-          <span>unread alerts</span>
+        <div className="bgs-alert-summary-counts">
+          <div className="watchlist-summary">
+            <strong>{query.data?.unread_count ?? 0}</strong>
+            <span>unread alerts</span>
+          </div>
+          {markedCount !== null && (
+            <div className="watchlist-summary" role="status">
+              <strong>{markedCount}</strong>
+              <span>alerts marked as read</span>
+            </div>
+          )}
         </div>
         <label>
           <span>Status</span>
@@ -282,6 +282,7 @@ export function BgsAlerts({
               <span>Current faction values</span>
               <div>
                 {canSendDiscord && <AlertDiscordButton alert={alert} />}
+                <AlertLifecycleActions alert={alert} />
                 {!alert.read_at && (
                   <button
                     className="secondary-button"
@@ -291,20 +292,6 @@ export function BgsAlerts({
                     }
                   >
                     <Check size={13} /> Mark read
-                  </button>
-                )}
-                {!alert.acknowledged_at && (
-                  <button
-                    className="secondary-button"
-                    disabled={mutation.isPending}
-                    onClick={() =>
-                      mutation.mutate({
-                        id: alert.id,
-                        state: { read: true, acknowledged: true },
-                      })
-                    }
-                  >
-                    <CheckCheck size={13} /> Acknowledge
                   </button>
                 )}
               </div>

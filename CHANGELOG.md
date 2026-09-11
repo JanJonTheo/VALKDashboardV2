@@ -1,15 +1,54 @@
 # Changelog
 
-Alle Änderungen von VALK Dashboard V2 seit dem initialen Repository-Stand, nach Datum absteigend. Die Einträge fassen die funktionalen und technischen Änderungen zusammen; die verlinkten Commits enthalten die vollständigen Dateidifferenzen.
+Die Änderungen am VALK Dashboard, nach Datum absteigend. Datumsangaben beziehen sich auf Europe/Berlin.
 
-Die Historie beginnt mit `c11adc9` vom 29.08.2026 und umfasst alle zehn bisher vorhandenen Commits sowie die anschließend deployten View-Änderungen. Zeitangaben beziehen sich auf Europe/Berlin (MESZ). Git dokumentiert Commit-, aber keine verlässlich rekonstruierbaren Push-Zeitpunkte; deshalb werden keine separaten Push-Daten behauptet. Es werden keine nachträglichen Release-Tags oder Versionsnummern erfunden.
+## 11.09.2026 – BGS-Alarme, Konflikte und Benutzerverwaltung
 
-## Noch nicht veröffentlicht
+### Konflikte besser im Blick
 
-### Dokumentation
+- BGS Alerts, Watchlist, Record Details und die Detailansicht unter System intelligence zeigen jetzt die gewonnenen Tage beider Fraktionen und die betroffenen Stakes. Mehrere gleichzeitige Konflikte eines Systems werden getrennt dargestellt. Fehlende Werte erscheinen als „—“.
+- Konfliktregeln melden auch den weiteren Verlauf: Für jedes betroffene Fraktionspaar erscheint mit jedem neuen abgeschlossenen System-Tick eine Warnung mit Spielstand, Status und Stakes. Frühere Warnungen werden erledigt. Wiederholte Auswertungen desselben Ticks erzeugen keine doppelten Meldungen.
+- Auch der Wechsel von angekündigt zu aktiv und ein gemeldeter Konfliktabschluss werden berücksichtigt. Ohne neue Systemdaten gibt es kein zusätzliches Update. Der Rules Catalog erklärt dieses Verhalten; bestehende Einstellungen für Konflikttypen und Versand bleiben erhalten.
+- Discord-Konfliktmeldungen enthalten ebenfalls Spielstand und Stakes. Bestehende Alarme wurden, soweit eindeutig zuordenbar, um historische Konfliktdaten ergänzt.
+- Stehen zwei Fraktionen bereits in einem angekündigten oder aktiven War, Civil War oder einer Election, entfällt die zusätzliche Gap-Warnung für dieses Paar. Neun überflüssige Meldungen wurden mandantenübergreifend entfernt.
 
-- Dieses Changelog mit der vollständigen bisherigen Änderungshistorie hinzugefügt.
-- Changelog in der README verlinkt.
+### Alarme einfacher verwalten
+
+- Admins können nach Bestätigung mit „Mark all as read“ alle für sie sichtbaren Meldungen des aktuellen Mandanten als gelesen markieren, auch außerhalb der aktuellen Filter. **Nur der eigene Lesestatus ändert sich. Für andere Benutzer bleiben die Meldungen ungelesen.**
+- Die Anzahl der markierten Meldungen steht direkt neben dem Ungelesen-Zähler im gleichen Layout.
+- Die Kopfaktionen stehen in zwei Zeilen: oben „60s refresh“ und „Refresh“, darunter „Mark all as read“ und „Views“.
+- Eigene persönliche Alarme können erledigt oder nach Bestätigung gelöscht werden. Gemeinsame Alarme können Admins erledigen und löschen. Die überflüssige Aktion „Acknowledge“ entfällt; die Schaltflächen bleiben auch bei wenig Platz vollständig sichtbar.
+- Erledigte Alarme werden nach zehn Tagen automatisch entfernt. Gelöschte Ereignisse werden durch eine erneute Auswertung nicht nochmals angelegt.
+
+### Benutzerverwaltung und Anzeige
+
+- „Roles & permissions“ links von „New user“ öffnet eine Hilfeseite mit einer Berechtigungsmatrix für Member, Leadership und Admin. Sie erläutert auch die Rechte für persönliche und gemeinsame Alarme.
+- Die Seitenleiste zeigt zuverlässig das Logo des angemeldeten Mandanten; bei einem Ladefehler erscheinen dessen Initialen.
+
+### Dokumentation und Betrieb
+
+- Die Änderungshistorie wurde zusammengeführt. AGENTS.md schreibt vor, das Changelog bei jedem Commit verständlich nachzuführen.
+- Überholte serverseitige Sicherungen wurden bereinigt. Aufbewahrte Sicherungen und Bereinigungsumfang sind in der [Sicherungsübersicht](docs/BACKUP-RETENTION.md) dokumentiert.
+- Die Funktionen wurden mit Backend-, Oberflächen- und Browserprüfungen sowie Typprüfung, Lint und Produktionsbuild geprüft. Der bereitgestellte Stand wurde für alle drei Mandanten erfolgreich auf Erreichbarkeit geprüft.
+
+Technische Einzelheiten: [Alarmverwaltung](docs/ALERT-HOUSEKEEPING.md), [Gap-Warnungen bei Konflikten](docs/CONFLICT-GAP-FIX.md), [Konfliktdetails und Tick-Updates](docs/CONFLICT-UPDATES.md).
+
+## 09.09.2026 – Kompakte Discord-Grafiken und vollständige Systemdaten
+
+- Grafikhöhe passt sich dem Alarmtyp an. Einzelfraktionsalarme verwenden nun ein Seitenverhältnis von 1000 × 240 statt 1200 × 576; Differenzen stehen neben den Pfeilen. Freie Flächen werden reduziert, ohne Vergleichswerte wegzulassen.
+- Bei unvollständigen historischen Systemmetadaten wird ein aktueller EDDN-Systemdatensatz mit ausdrücklich gekennzeichnetem Datenstand verwendet. Population, Zugehörigkeit, Regierung und Wirtschaft erscheinen wieder; die historischen Einflusswerte bleiben unverändert.
+- Beschriftungen auf „System Data“, „Previous Snapshot“ und „Alert Snapshot“ vereinheitlicht. RC, Inara, Spansh und EDGIS stehen gemeinsam unter „System/Map Links“.
+- Prüfung: 46 Backendtests erfolgreich, alle Grafiktypen visuell kontrolliert. Für Tascheter Sector OY-R a4-0 wurden Systemmetadaten und Population anhand der Live-Daten geprüft, ohne eine Discord-Nachricht zu versenden.
+
+## 09.09.2026 – Historische Vergleichsgrafiken in Discord-BGS-Alarmen
+
+Status: Backend-Erweiterung am 09.09.2026 aktiviert. Das Dashboardrelease bleibt unverändert.
+
+- Discord-Nachrichten beginnen mit `## Systemname` und lokal dargestelltem Alarmzeitpunkt. Anschließend folgen ein eingebettetes PNG, Previous snapshot / Alert snapshot, historische Systemdaten und Systemlinks.
+- Deterministische Grafiken für Einflussverlust und -änderung, Fraktionsabstand, Schwellenwert und Konflikt. Verlustalarme zeigen vorherigen Einfluss, roten Abwärtspfeil mit Differenz in Prozentpunkten und auslösenden Einflusswert.
+- Neue Alarme speichern einen versionierten Darstellungskontext in den vorhandenen Fakten. Mehrtägige Vergleichsabstände bleiben erhalten; späterer Versand ersetzt die Alarmwerte nicht durch Live-Daten. Bestehende Alarme nutzen gespeicherte Fakten und eindeutig zugeordnete historische Snapshots. Fehlende oder widersprüchliche Vergleichswerte werden nicht erfunden.
+- Automatischer und manueller Versand verwenden denselben Multipart-Bildanhang. Bei Renderfehlern bleibt die Textmeldung versendbar. Keine zusätzliche Datenbanktabelle oder öffentliche API erforderlich.
+- Prüfung: 43 Backendtests erfolgreich, einschließlich aller Grafiktypen, langfristig gespeicherter Vergleiche, korrigierter Snapshots, historischer Null-Listen, langer Namen, Discord-Limits und Renderfehlern. Grafiken visuell geprüft und Nachrichtenaufbau mit einem vorhandenen Live-Alarm kontrolliert, ohne eine Discord-Nachricht zu versenden.
 
 ## 08.09.2026 – Vollständig sichtbare Systemzeile im Alert
 

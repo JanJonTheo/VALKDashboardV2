@@ -342,6 +342,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/dashboard/bgs/alerts/{alert_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Permanently delete an owned personal alert or, for admins, a tenant-wide alert. Suppresses recreation of the same event and tick. */
+    delete: operations["deleteBgsAlert"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/dashboard/bgs/alerts/{alert_id}/resolve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Owner or tenant admin marks the alert resolved. Repeating preserves the original resolution time. Resolved alerts expire after ten days. */
+    post: operations["resolveBgsAlert"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/dashboard/bgs/alerts/{alert_id}/state": {
     parameters: {
       query?: never;
@@ -830,6 +864,8 @@ export interface components {
       read_at?: string | null;
       /** Format: date-time */
       acknowledged_at?: string | null;
+      /** @description Whether the current user may resolve or delete this alert */
+      can_manage?: boolean;
     };
     BgsAiReport: {
       /** Format: uuid */
@@ -1486,6 +1522,48 @@ export interface operations {
             generated_at: string;
           };
         };
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  deleteBgsAlert: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        alert_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Alert and dependent delivery and user states deleted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["ErrorResponse"];
+    };
+  };
+  resolveBgsAlert: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        alert_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Alert resolved and unclaimed deliveries cancelled */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       default: components["responses"]["ErrorResponse"];
     };

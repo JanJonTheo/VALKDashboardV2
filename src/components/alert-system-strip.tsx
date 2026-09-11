@@ -1,4 +1,6 @@
 "use client";
+import { ConflictDetails } from "@/components/conflict-details";
+import { normalizeConflict } from "@/lib/system-watchlist";
 import { AlertTriangle, Info } from "lucide-react";
 import { alertContext, factionKey } from "@/lib/alert-context";
 import type { BgsAlert } from "@/lib/bgs-rules";
@@ -59,6 +61,16 @@ export function AlertSystemStrip({
           {context.resolved && <p>This alert is resolved.</p>}
         </div>
       </details>
+      <ConflictDetails
+        title="Conflict at alert tick"
+        conflicts={
+          Array.isArray(alert.facts.new_conflicts)
+            ? alert.facts.new_conflicts.map((value) =>
+                normalizeConflict(value as Record<string, unknown>),
+              )
+            : []
+        }
+      />
       <div
         className="alert-factions"
         aria-label="Affected factions — current values"

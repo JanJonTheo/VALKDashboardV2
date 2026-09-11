@@ -58,7 +58,7 @@ function sessionFor(
     id: tenant.id,
     name: tenant.name,
     factionName: tenant.factionName,
-    logoUrl: "/api/tenant-logo",
+    logoUrl: `/api/tenant-logo?tenant=${encodeURIComponent(tenant.id)}`,
   };
   return {
     user,

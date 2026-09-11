@@ -184,7 +184,7 @@ const protectedFactionConditionLabels: Partial<
   Record<BgsRuleConditionType, string>
 > = {
   tenant_faction_loss: "Protected faction loses influence",
-  tenant_faction_new_conflict: "Protected faction enters a conflict",
+  tenant_faction_new_conflict: "Protected faction conflicts & tick updates",
   tenant_faction_below: "Protected faction below threshold",
   tenant_faction_gap: "Another faction closes the gap to the protected faction",
 };
@@ -207,7 +207,7 @@ function conditionSummary(
 ) {
   const label = conditionLabel(condition.type, targetKind);
   if (condition.type === "tenant_faction_new_conflict")
-    return `${label}: Election, War`;
+    return `${label}: Election, War · new conflicts and updates every settled tick, with won days and stakes`;
   const suffix =
     condition.threshold_pp === undefined
       ? ""

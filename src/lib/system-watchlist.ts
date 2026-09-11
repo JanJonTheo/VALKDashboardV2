@@ -65,6 +65,44 @@ export interface WatchedConflict {
   faction2: string;
   status: string;
   type: string;
+  stake1?: string;
+  stake2?: string;
+  wonDays1?: number | null;
+  wonDays2?: number | null;
+  updatedAt?: string;
+}
+
+export function normalizeConflict(
+  conflict: Record<string, unknown>,
+): WatchedConflict {
+  const f1 =
+    conflict.Faction1 && typeof conflict.Faction1 === "object"
+      ? (conflict.Faction1 as Record<string, unknown>)
+      : {};
+  const f2 =
+    conflict.Faction2 && typeof conflict.Faction2 === "object"
+      ? (conflict.Faction2 as Record<string, unknown>)
+      : {};
+  const days = (value: unknown) =>
+    value !== null &&
+    value !== undefined &&
+    value !== "" &&
+    Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
+  return {
+    faction1: text(conflict.faction1 ?? f1.Name),
+    faction2: text(conflict.faction2 ?? f2.Name),
+    type: humanizeBgsValue(
+      conflict.war_type ?? conflict.type ?? conflict.WarType,
+    ),
+    status: humanizeBgsValue(conflict.status ?? conflict.Status),
+    stake1: text(conflict.stake1 ?? f1.Stake),
+    stake2: text(conflict.stake2 ?? f2.Stake),
+    wonDays1: days(conflict.won_days1 ?? f1.WonDays),
+    wonDays2: days(conflict.won_days2 ?? f2.WonDays),
+    updatedAt: text(conflict.updated_at),
+  };
 }
 
 export interface WatchedSystem {
@@ -688,14 +726,7 @@ export function normalizeWatchedSystems(value: unknown): WatchedSystem[] {
       .filter((faction) => faction.name)
       .sort((left, right) => right.influence - left.influence);
 
-    const conflicts = rows(entry.conflicts).map(
-      (conflict): WatchedConflict => ({
-        faction1: text(conflict.faction1),
-        faction2: text(conflict.faction2),
-        status: humanizeBgsValue(conflict.status),
-        type: humanizeBgsValue(conflict.war_type ?? conflict.type),
-      }),
-    );
+    const conflicts = rows(entry.conflicts).map(normalizeConflict);
     const powerplayPowers = [
       ...parseStringList(info.controlling_power),
       ...rows(entry.powerplays).flatMap((powerplay) =>
