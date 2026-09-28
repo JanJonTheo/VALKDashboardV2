@@ -1,0 +1,152 @@
+{
+  "measured_at": "2026-09-27T09:36:37.551496+00:00",
+  "base_url": "https://valk-elite.de",
+  "logins_and_bff": [
+    {
+      "tenant": "East India Company",
+      "login_ms": 161.75,
+      "requests": [
+        {
+          "path": "/api/bff/home",
+          "status": 200,
+          "duration_ms": 48.37
+        },
+        {
+          "path": "/api/bff/data-explorer?table=event&options=1",
+          "status": 200,
+          "duration_ms": 195.88
+        },
+        {
+          "path": "/api/bff/data-explorer?table=event&search=performance-smoke-nonexistent&page=2&page_size=25",
+          "status": 200,
+          "duration_ms": 5833.94
+        },
+        {
+          "path": "/api/bgs-alerts?limit=2",
+          "status": 200,
+          "duration_ms": 53.7
+        }
+      ]
+    },
+    {
+      "tenant": "VALK Development",
+      "login_ms": 120.39,
+      "requests": [
+        {
+          "path": "/api/bff/home",
+          "status": 200,
+          "duration_ms": 46.47
+        },
+        {
+          "path": "/api/bff/data-explorer?table=event&options=1",
+          "status": 200,
+          "duration_ms": 87.87
+        },
+        {
+          "path": "/api/bff/data-explorer?table=event&search=performance-smoke-nonexistent&page=2&page_size=25",
+          "status": 200,
+          "duration_ms": 1407.03
+        },
+        {
+          "path": "/api/bgs-alerts?limit=2",
+          "status": 200,
+          "duration_ms": 30.77
+        }
+      ],
+      "watchlist": {
+        "systems": 86,
+        "status": 200,
+        "duration_ms": 86.31
+      }
+    },
+    {
+      "tenant": "Impactive Profit Protectors",
+      "login_ms": 140.38,
+      "requests": [
+        {
+          "path": "/api/bff/home",
+          "status": 200,
+          "duration_ms": 40.0
+        },
+        {
+          "path": "/api/bff/data-explorer?table=event&options=1",
+          "status": 200,
+          "duration_ms": 50.24
+        },
+        {
+          "path": "/api/bff/data-explorer?table=event&search=performance-smoke-nonexistent&page=2&page_size=25",
+          "status": 200,
+          "duration_ms": 193.08
+        },
+        {
+          "path": "/api/bgs-alerts?limit=2",
+          "status": 200,
+          "duration_ms": 33.4
+        }
+      ]
+    }
+  ],
+  "parallel_tenant_reads": [
+    {
+      "tenant": "East India Company",
+      "matched": true,
+      "duration_ms": 15.56
+    },
+    {
+      "tenant": "VALK Development",
+      "matched": true,
+      "duration_ms": 20.97
+    },
+    {
+      "tenant": "Impactive Profit Protectors",
+      "matched": true,
+      "duration_ms": 16.4
+    },
+    {
+      "tenant": "East India Company",
+      "matched": true,
+      "duration_ms": 12.18
+    },
+    {
+      "tenant": "VALK Development",
+      "matched": true,
+      "duration_ms": 27.69
+    },
+    {
+      "tenant": "Impactive Profit Protectors",
+      "matched": true,
+      "duration_ms": 17.2
+    },
+    {
+      "tenant": "East India Company",
+      "matched": true,
+      "duration_ms": 9.02
+    },
+    {
+      "tenant": "VALK Development",
+      "matched": true,
+      "duration_ms": 16.27
+    },
+    {
+      "tenant": "Impactive Profit Protectors",
+      "matched": true,
+      "duration_ms": 14.5
+    },
+    {
+      "tenant": "East India Company",
+      "matched": true,
+      "duration_ms": 8.96
+    },
+    {
+      "tenant": "VALK Development",
+      "matched": true,
+      "duration_ms": 11.09
+    },
+    {
+      "tenant": "Impactive Profit Protectors",
+      "matched": true,
+      "duration_ms": 8.24
+    }
+  ],
+  "temporary_users_removed": true
+}

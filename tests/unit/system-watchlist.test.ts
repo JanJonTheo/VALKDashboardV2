@@ -98,6 +98,11 @@ describe("system watchlist", () => {
         faction2: "Black Omega",
         status: "Active",
         type: "War",
+        stake1: "",
+        stake2: "",
+        wonDays1: null,
+        wonDays2: null,
+        updatedAt: "",
       },
     ]);
   });

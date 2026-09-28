@@ -52,17 +52,25 @@ test("data explorer supports legacy filters, JSON detail and record export", asy
     const url = new URL(route.request().url());
     lastRequest = url;
     const isOptions = url.searchParams.get("options") === "1";
+    const needle = url.searchParams.get("search")?.toLowerCase();
+    const matchingRows = needle
+      ? rows.filter((row) =>
+          Object.values(row).some((value) =>
+            String(value).toLowerCase().includes(needle),
+          ),
+        )
+      : rows;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        data: isOptions ? [] : rows,
+        data: isOptions ? [] : matchingRows,
         metrics: { rows: rows.length, returned: isOptions ? 0 : rows.length },
         generated_at: "2026-08-29T12:00:00Z",
         pagination: {
           page: 1,
           page_size: Number(url.searchParams.get("page_size") ?? 50),
-          total: rows.length,
+          total: matchingRows.length,
         },
         meta: {
           columns: Object.keys(rows[0]),
@@ -112,8 +120,9 @@ test("data explorer supports legacy filters, JSON detail and record export", asy
 
   await page.getByLabel("Search all table fields").fill("East India Company");
   await expect
-    .poll(() => lastRequest?.searchParams.get("scope"), { timeout: 10_000 })
-    .toBe("all");
+    .poll(() => lastRequest?.searchParams.get("search"), { timeout: 10_000 })
+    .toBe("East India Company");
+  expect(lastRequest?.searchParams.has("scope")).toBe(false);
   await expect(page.getByText("1 rows from event")).toBeVisible();
 
   const tableScroll = page.getByRole("region", {

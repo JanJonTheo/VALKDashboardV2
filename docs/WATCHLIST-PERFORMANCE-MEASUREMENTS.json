@@ -1,0 +1,26 @@
+{
+  "measured_at": "2026-09-27T08:18:27.267875+00:00",
+  "requested_systems": 86,
+  "measurements": [
+    {
+      "query": "current_plan",
+      "plan": [
+        "SEARCH system_tick_snapshot USING INDEX ix_system_tick_snapshot_is_settled (is_settled=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "returned_rows": 111,
+      "duration_ms": 3639.23
+    },
+    {
+      "query": "existing_system_tick_index",
+      "plan": [
+        "SEARCH system_tick_snapshot USING INDEX ix_snapshot_system_ticktime (system_name=? AND ticktime>?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "returned_rows": 111,
+      "matches_baseline": true,
+      "duration_ms": 3.04
+    }
+  ],
+  "statistics_present": false
+}

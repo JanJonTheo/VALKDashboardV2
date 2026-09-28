@@ -1,353 +1,348 @@
 # Changelog
 
-Die Änderungen am VALK Dashboard, nach Datum absteigend. Datumsangaben beziehen sich auf Europe/Berlin.
+Changes to VALK Dashboard, listed in reverse chronological order. Dates and times use Europe/Berlin.
 
-## 11.09.2026 – BGS-Alarme, Konflikte und Benutzerverwaltung
+## 28.09.2026 - ANKe remote monitoring and control
 
-### Konflikte besser im Blick
+- Prepared the current remote and API performance changes for GitHub, including the English changelog and deployment diagnostics. Release verification: all 209 unit tests and TypeScript checking pass.
 
-- BGS Alerts, Watchlist, Record Details und die Detailansicht unter System intelligence zeigen jetzt die gewonnenen Tage beider Fraktionen und die betroffenen Stakes. Mehrere gleichzeitige Konflikte eines Systems werden getrennt dargestellt. Fehlende Werte erscheinen als „—“.
-- Konfliktregeln melden auch den weiteren Verlauf: Für jedes betroffene Fraktionspaar erscheint mit jedem neuen abgeschlossenen System-Tick eine Warnung mit Spielstand, Status und Stakes. Frühere Warnungen werden erledigt. Wiederholte Auswertungen desselben Ticks erzeugen keine doppelten Meldungen.
-- Auch der Wechsel von angekündigt zu aktiv und ein gemeldeter Konfliktabschluss werden berücksichtigt. Ohne neue Systemdaten gibt es kein zusätzliches Update. Der Rules Catalog erklärt dieses Verhalten; bestehende Einstellungen für Konflikttypen und Versand bleiben erhalten.
-- Discord-Konfliktmeldungen enthalten ebenfalls Spielstand und Stakes. Bestehende Alarme wurden, soweit eindeutig zuordenbar, um historische Konfliktdaten ergänzt.
-- Stehen zwei Fraktionen bereits in einem angekündigten oder aktiven War, Civil War oder einer Election, entfällt die zusätzliche Gap-Warnung für dieses Paar. Neun überflüssige Meldungen wurden mandantenübergreifend entfernt.
+- Added Operations → ANKe Remote for pairing clients, viewing explicitly shared Elite screens, and managing device access.
+- Added optional exclusive keyboard/mouse control, remote assist start reviews and an always-visible remote stop action when control is enabled locally.
+- Remote routes require authenticated sessions and same-origin mutations; media connections use a configured CSP origin. Added browser and boundary tests.
+- Verified a paired Windows client with live Elite video in the production dashboard. Fixed HTTPS proxy origin checks and upstream API paths; the native build now loads runtime media settings so the deployed CSP permits LiveKit.
 
-### Alarme einfacher verwalten
+## 27.09.2026 - Reduce unnecessary API load and investigate timeouts
 
-- Admins können nach Bestätigung mit „Mark all as read“ alle für sie sichtbaren Meldungen des aktuellen Mandanten als gelesen markieren, auch außerhalb der aktuellen Filter. **Nur der eigene Lesestatus ändert sich. Für andere Benutzer bleiben die Meldungen ungelesen.**
-- Die Anzahl der markierten Meldungen steht direkt neben dem Ungelesen-Zähler im gleichen Layout.
-- Die Kopfaktionen stehen in zwei Zeilen: oben „60s refresh“ und „Refresh“, darunter „Mark all as read“ und „Views“.
-- Eigene persönliche Alarme können erledigt oder nach Bestätigung gelöscht werden. Gemeinsame Alarme können Admins erledigen und löschen. Die überflüssige Aktion „Acknowledge“ entfällt; die Schaltflächen bleiben auch bei wenig Platz vollständig sichtbar.
-- Erledigte Alarme werden nach zehn Tagen automatisch entfernt. Gelöschte Ereignisse werden durch eine erneute Auswertung nicht nochmals angelegt.
+- Watchlist history uses the existing system/time index when available. Tenant leaderboard indexes avoid repeated full-table scans, and alert delivery information is loaded in one batch.
+- Data explorer now loads a compact filter catalog in one API request and searches on the server with pagination, including literal Unicode and JSON-field searches. Complete downloads are reserved for explicit copy/export actions.
+- Flask database sessions are isolated per request and reuse bounded tenant connection pools, enabling four API workers without mixing tenant data. Added concurrent isolation and rollback tests, and updated outdated conflict-display test expectations for release verification.
 
-### Benutzerverwaltung und Anzeige
+- Home, feature and Data explorer requests now propagate cancellation when users leave a view or change filters. Cancelled explorer scans stop requesting further pages.
+- These views no longer automatically repeat authorization, rate-limit or gateway failures. Full-table explorer scans do not automatically restart after errors, reducing pressure on a slow API. Other queries use at most one default retry; explicit per-view settings remain in effect.
+- Changing the page size of Data explorer search results reuses the downloaded results. Upstream body timeouts and malformed responses now surface as errors instead of apparently empty successful results.
+- Deployed the backend changes, seven tenant indexes and the new dashboard release on 27 September. In production checks, the 86-system watchlist fell from about 5.7 seconds to 0.09–0.16 seconds; current-tick leaderboard requests fell from about 1.3 seconds to 0.06 seconds. These are individual measurements, not guaranteed response times.
+- Verified 201 dashboard tests, 136 backend tests plus 31 subtests, 8 bot smoke tests and 41 browser checks (4 viewport-specific skips), along with builds, lint, actual logins for all three tenants and concurrent tenant isolation. Backups, rollback instructions and remaining broad-search limitations are documented in `docs/API-PERFORMANCE.md`.
 
-- „Roles & permissions“ links von „New user“ öffnet eine Hilfeseite mit einer Berechtigungsmatrix für Member, Leadership und Admin. Sie erläutert auch die Rechte für persönliche und gemeinsame Alarme.
-- Die Seitenleiste zeigt zuverlässig das Logo des angemeldeten Mandanten; bei einem Ladefehler erscheinen dessen Initialen.
+## 24.09.2026 - Duplicate Discord notifications in VALK Development
 
-### Dokumentation und Betrieb
+- Corrected overlapping personal and tenant rule packages that sent the same events to the same Discord webhook. Conflict, influence-loss, below-5%, and 2 pp gap notifications now use the tenant package's Discord delivery; personal dashboard alerts remain enabled.
+- Verified matching rule conditions and severity, identical webhook destinations, and no outstanding personal deliveries before applying the configuration change. Backed up the tenant database and verified database integrity and all eight rule settings afterward. No test messages were sent.
+- This is a live tenant configuration correction; no application deployment was required. Details and rollback instructions are in `docs/DISCORD-DUPLICATE-REPAIR.md`.
 
-- Die Änderungshistorie wurde zusammengeführt. AGENTS.md schreibt vor, das Changelog bei jedem Commit verständlich nachzuführen.
-- Überholte serverseitige Sicherungen wurden bereinigt. Aufbewahrte Sicherungen und Bereinigungsumfang sind in der [Sicherungsübersicht](docs/BACKUP-RETENTION.md) dokumentiert.
-- Die Funktionen wurden mit Backend-, Oberflächen- und Browserprüfungen sowie Typprüfung, Lint und Produktionsbuild geprüft. Der bereitgestellte Stand wurde für alle drei Mandanten erfolgreich auf Erreichbarkeit geprüft.
+## 12.09.2026 - Conflict graphics and English changelog
 
-Technische Einzelheiten: [Alarmverwaltung](docs/ALERT-HOUSEKEEPING.md), [Gap-Warnungen bei Konflikten](docs/CONFLICT-GAP-FIX.md), [Konfliktdetails und Tick-Updates](docs/CONFLICT-UPDATES.md).
+- Discord graphics for new conflicts and conflict updates now show each faction's Won Days and Stake in both the previous and alert snapshots. The image remains exactly 1000 x 285 pixels.
+- Factions retain the same order across snapshots even when the source lists them in reverse order. Unknown scores remain distinct from zero. Long labels are abbreviated to fit; the accompanying Discord text retains the detailed values.
+- Translated the complete dashboard and backend changelogs into English. Future entries are to be written in English.
+- Validation: 13 graphics tests passed, including image dimensions, faction matching, reversed order, zero/missing scores, long labels and missing snapshots. A rendered example was visually checked.
 
-## 09.09.2026 – Kompakte Discord-Grafiken und vollständige Systemdaten
+- Deployment: graphics backend activated on 12.09.2026 at 03:26 CEST; installed source matches the tested file. The service is active and health checks pass for all three tenants. These changes have not yet been committed.
 
-- Grafikhöhe passt sich dem Alarmtyp an. Einzelfraktionsalarme verwenden nun ein Seitenverhältnis von 1000 × 240 statt 1200 × 576; Differenzen stehen neben den Pfeilen. Freie Flächen werden reduziert, ohne Vergleichswerte wegzulassen.
-- Bei unvollständigen historischen Systemmetadaten wird ein aktueller EDDN-Systemdatensatz mit ausdrücklich gekennzeichnetem Datenstand verwendet. Population, Zugehörigkeit, Regierung und Wirtschaft erscheinen wieder; die historischen Einflusswerte bleiben unverändert.
-- Beschriftungen auf „System Data“, „Previous Snapshot“ und „Alert Snapshot“ vereinheitlicht. RC, Inara, Spansh und EDGIS stehen gemeinsam unter „System/Map Links“.
-- Prüfung: 46 Backendtests erfolgreich, alle Grafiktypen visuell kontrolliert. Für Tascheter Sector OY-R a4-0 wurden Systemmetadaten und Population anhand der Live-Daten geprüft, ohne eine Discord-Nachricht zu versenden.
+## 11.09.2026 - BGS alerts, conflicts and user administration
 
-## 09.09.2026 – Historische Vergleichsgrafiken in Discord-BGS-Alarmen
+### Better conflict information
 
-Status: Backend-Erweiterung am 09.09.2026 aktiviert. Das Dashboardrelease bleibt unverändert.
+- BGS Alerts, Watchlist, Record Details and System intelligence details now show both factions' won days and affected stakes. Multiple simultaneous conflicts in a system appear separately. Missing values are shown as a dash.
+- Conflict rules also track ongoing conflicts: each affected faction pair receives a warning with scores, status and stakes for every new settled system tick. Earlier warnings are resolved. Repeated evaluation of the same tick does not create duplicates.
+- Updates cover the transition from pending to active and a reported conflict conclusion. No additional update is generated without new system data. The Rules Catalog explains this behaviour; existing conflict-type and delivery settings are preserved.
+- Discord conflict messages also include scores and stakes. Existing alerts were supplemented with historical conflict details wherever an exact match was available.
+- Gap warnings are suppressed for faction pairs already in a pending or active War, Civil War or Election. Nine redundant alerts were removed across tenants.
 
-- Discord-Nachrichten beginnen mit `## Systemname` und lokal dargestelltem Alarmzeitpunkt. Anschließend folgen ein eingebettetes PNG, Previous snapshot / Alert snapshot, historische Systemdaten und Systemlinks.
-- Deterministische Grafiken für Einflussverlust und -änderung, Fraktionsabstand, Schwellenwert und Konflikt. Verlustalarme zeigen vorherigen Einfluss, roten Abwärtspfeil mit Differenz in Prozentpunkten und auslösenden Einflusswert.
-- Neue Alarme speichern einen versionierten Darstellungskontext in den vorhandenen Fakten. Mehrtägige Vergleichsabstände bleiben erhalten; späterer Versand ersetzt die Alarmwerte nicht durch Live-Daten. Bestehende Alarme nutzen gespeicherte Fakten und eindeutig zugeordnete historische Snapshots. Fehlende oder widersprüchliche Vergleichswerte werden nicht erfunden.
-- Automatischer und manueller Versand verwenden denselben Multipart-Bildanhang. Bei Renderfehlern bleibt die Textmeldung versendbar. Keine zusätzliche Datenbanktabelle oder öffentliche API erforderlich.
-- Prüfung: 43 Backendtests erfolgreich, einschließlich aller Grafiktypen, langfristig gespeicherter Vergleiche, korrigierter Snapshots, historischer Null-Listen, langer Namen, Discord-Limits und Renderfehlern. Grafiken visuell geprüft und Nachrichtenaufbau mit einem vorhandenen Live-Alarm kontrolliert, ohne eine Discord-Nachricht zu versenden.
+### Easier alert management
 
-## 08.09.2026 – Vollständig sichtbare Systemzeile im Alert
+- After confirmation, admins can use "Mark all as read" for every alert visible to them in the current tenant, including alerts outside the current filters. **Only the admin's own read status changes. Alerts remain unread for other users.**
+- The number of marked alerts appears beside the unread count with matching styling.
+- Header actions use two rows: "60s refresh" and "Refresh" above "Mark all as read" and "Views".
+- Users can resolve their own personal alerts or delete them after confirmation. Admins can resolve and delete shared alerts. The redundant "Acknowledge" action was removed; action buttons remain fully visible in narrow layouts.
+- Resolved alerts are automatically removed after ten days. Re-evaluation does not recreate deleted events.
 
-Status: am 08.09.2026 um 22:31 MESZ deployt. Release-Kennung: `20260908-alert-row-fix`.
+### User administration and display
 
-- Die Controller-/Systemzeile hatte nur 16–18 px Platz für 22 px hohe Info-Chips. Sie erhält nun 24 px einschließlich vertikalem Innenabstand. Der zusätzliche Platz wird im Footer ausgeglichen; Gesamthöhe und Fraktionskarten bleiben unverändert.
-- Regressionstest prüft die vollständige vertikale Sichtbarkeit aller Systeminformationen auf Desktop, Tablet und Smartphone. Alle drei Browserprüfungen, Lint und Produktionsbuild einschließlich Typprüfung erfolgreich; öffentliche Health-Prüfung HTTP 200. Kein Backend-Neustart erforderlich.
+- "Roles & permissions", to the left of "New user", opens a help page with a permissions matrix for Member, Leadership and Admin, including permissions for personal and shared alerts.
+- The sidebar reliably shows the signed-in tenant's logo, falling back to tenant initials if the image cannot load.
 
-## 08.09.2026 – Discord-Embeds und Alert Center
+### Documentation and operations
 
-Status: am 08.09.2026 um 22:19 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-discord-embeds`.
+- Consolidated the change history. AGENTS.md requires a user-friendly changelog update with every commit.
+- Removed obsolete server backups. Retained backups and cleanup scope are documented in the [backup inventory](docs/BACKUP-RETENTION.md).
+- Features were checked with backend, component and browser tests, type checking, lint and production builds. The deployed service passed health checks for all three tenants.
 
-- Automatische und manuell gesendete BGS-Alarme verwenden dasselbe Discord-Embed: verlinkter Systemtitel, farbiger Schweregrad, Status und deutlich hervorgehobener historischer Alarmwert samt Grenzwert.
-- Nur die zum Alarm gehörenden Fraktionen erscheinen als kompakte Felder mit aktuellen Einflusswerten, Regierung, Zugehörigkeit sowie aktiven und ausstehenden Zuständen. Systemdaten, externe Links und getrennte Zeitangaben ergänzen die Nachricht. Fehlende aktuelle Daten verhindern den Versand nicht.
-- Native Discord-Formatierung mit begrenzten Feldlängen, maskierten Markdown-Daten und deaktivierten Erwähnungen. Bestehende Versandwarteschlange und Wiederholungslogik bleiben erhalten. Bereits versendete Nachrichten werden nicht nachträglich verändert.
-- Dashboardüberschrift auf „Alert Center“ vereinheitlicht.
-- Prüfung: 36 Backendtests mit simuliertem Discord-Versand erfolgreich; Lint und Produktionsbuild einschließlich Typprüfung erfolgreich. Embed für den Live-Alarm in 39 Tauri mit beiden betroffenen Fraktionen geprüft, ohne eine Discord-Nachricht zu versenden.
-- Backend-Sicherung: `/home/valk/dashboard-v2/shared/discord-embeds-backup-20260908/`. Voriges Dashboardrelease bleibt erhalten.
+Technical details: [alert management](docs/ALERT-HOUSEKEEPING.md), [gap warnings during conflicts](docs/CONFLICT-GAP-FIX.md), [conflict details and tick updates](docs/CONFLICT-UPDATES.md).
 
-## 08.09.2026 – Kompakte Alert-Streifen mit Fraktionskontext
+## 09.09.2026 - Compact Discord graphics and complete system data
 
-Status: am 08.09.2026 um 21:58 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-alert-faction-strips`.
+- Graphic height adapts to the alert type. Single-faction alerts use 1000 x 240 pixels instead of 1200 x 576; differences appear next to arrows. Unused space is reduced without omitting comparison values.
+- Incomplete historical system metadata falls back to the latest EDDN system record with an explicit data-source label. Population, allegiance, government and economy are available again; historical influence values remain unchanged.
+- Labels standardised to "System Data", "Previous Snapshot" and "Alert Snapshot". RC, Inara, Spansh and EDGIS share the "System/Map Links" field.
+- Validation: 46 backend tests passed; all graphic types were visually reviewed. Live metadata and population were checked for Tascheter Sector OY-R a4-0 without sending a Discord message.
 
-- Alert-Karten enthalten Systeminformationen und Fraktionskarten aus denselben UI-Bausteinen wie die Watchlist. Angezeigt werden nur die alarmbezogenen Fraktionen; Einzelfraktionsalarme erhalten keinen künstlichen Vergleichspartner.
-- Alarmkennzahl und Grenzwert sind deutlich hervorgehoben und als Werte bei Auslösung gekennzeichnet. Die Fraktionskarten zeigen aktuelle Daten; die vollständige ursprüngliche Meldung bleibt aufklappbar. Fehlende Einflusswerte erscheinen als „—“.
-- Kompakte feste Kartenhöhen von 244 px auf Desktop/Tablet und 394 px auf Smartphones. Gegen die vorher gemessenen 242,69 bzw. 394,44 px des Beispielalarms geprüft; alle zusätzlichen Informationen passen innerhalb dieser Höhe. Auf kleinen Bildschirmen lassen sich die Fraktionskarten horizontal verschieben.
-- Record Details übernehmen den konkreten Alarmkontext: betroffene Fraktionszeilen erhalten Alarmsymbol und kurze Meldung, zugehörige Verlaufslinien und Legendeneinträge werden hervorgehoben. Andere Fraktionen bleiben sichtbar; die Watchlist öffnet Details weiterhin ohne Alarmmarkierungen.
-- Sichtbare Alert-Systeme werden gemeinsam geladen, doppelte Systeme zusammengefasst und die Ergebnisse mit der Detailansicht geteilt. Neuer sitzungsgeschützter POST für `/api/system-watchlist/detail` mit maximal 100 Systemen; keine Backend- oder Datenbankschemaänderung.
-- Prüfung: 168 Unit-Testfälle sowie 21 Browserprüfungen erfolgreich. Zwei bestehende Unit-Tests überschritten im parallelen Lauf ihr Zeitlimit und bestanden bei Einzelprüfung. Kartenhöhe, Tastaturzugriff, Fraktionsauswahl und unterschiedliche Alarme desselben Systems auf Desktop/Tablet/Smartphone geprüft; Typprüfung, Lint und Produktionsbuild erfolgreich.
-- Live mit bestehender jjt-Sitzung geprüft: Systemdaten und Batch-Abfrage erfolgreich, beide Fraktionen des Alarms mit gespeichertem Abstand 1,87 pp korrekt zugeordnet. Keine Discord-Testmeldung gesendet; vorheriges Release bleibt erhalten.
+## 09.09.2026 - Historical comparison graphics in Discord BGS alerts
 
-## 08.09.2026 – Alert-Systemdetails und einzelner Discord-Versand
+Status: backend extension activated on 09.09.2026. The dashboard release was unchanged.
 
-Status: am 08.09.2026 um 21:06 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-alert-actions`.
+- Discord messages start with the system name and locally formatted alert time, followed by an embedded PNG, previous/alert snapshots, historical system data and system links.
+- Deterministic graphics cover influence losses and changes, faction gaps, thresholds and conflicts. Loss graphics show previous influence, a red downward arrow, the percentage-point difference and influence at the trigger.
+- New alerts store a versioned presentation context with their facts. Comparisons spanning multiple days are preserved; later delivery does not replace trigger values with live data. Existing alerts use stored facts and exactly matched historical snapshots. Missing or inconsistent values are not invented.
+- Automatic and manual delivery use the same multipart image attachment. Text messages remain deliverable if rendering fails. No additional database table or public API is required.
+- Validation: 43 backend tests passed, covering all graphic types, stored long-term comparisons, corrected snapshots, historical null lists, long names, Discord limits and rendering failures. Graphics and message structure were checked using an existing live alert without sending a Discord message.
 
-- Jede Alert-Karte beginnt mit dem goldfarben hervorgehobenen, anklickbaren Systemnamen. Der Klick öffnet dieselben Record Details wie in der Watchlist rechts als Seitenfenster, einschließlich Influence-Verlauf. Systemdaten werden erst beim Öffnen geladen, unabhängig von der persönlichen Watchlist.
-- Dropdown pro Alert für Raven Colonial, Inara, Spansh, EDGIS und Record Details ergänzt. Lange Systemnamen umbrechen auf kleinen Bildschirmen vollständig.
-- Leadership und Admins können genau einen sichtbaren Alarm an den BGS-Channel des Mandanten senden, auch eigene persönliche Alarme. Bewusstes erneutes Senden ist möglich; eindeutige Request-Kennungen und atomare Warteschlangeneinträge verhindern doppelte Aufträge durch Doppelklicks und Anfragewiederholungen.
-- Versandstatus, letzter erfolgreicher Versand und Fehler werden angezeigt. Laufende Zustellungen werden alle fünf Sekunden aktualisiert. Discord-Nachrichten enthalten System, Alarmtext, Schweregrad, Zeitangaben und Status; Lesestatus und Bestätigung bleiben unverändert.
-- Prüfung: 31 Backend-Tests, 160 Dashboard-Unit-Tests und 18 Browserprüfungen für Alerts und Watchlists auf Desktop/Tablet/Smartphone erfolgreich. Typprüfung, Lint und Produktionsbuild erfolgreich. Discord-Zustellung und Wiederholung wurden mit simulierten Antworten geprüft.
-- Live mit vorhandener jjt-Sitzung geprüft: Alert-Metadaten, konfigurierter BGS-Webhook und Systemdetails erfolgreich; ungültiger Versandrequest HTTP 400, ohne Nachricht zu erzeugen. Die vorübergehende EDDN-Datenbanksperre durch die automatische Startwartung war beim abschließenden Test aufgehoben.
-- Sicherung von Backend-Dateien und Mandantendatenbank: `/home/valk/dashboard-v2/shared/alert-actions-backup-20260908/`. Voriges Dashboardrelease bleibt erhalten.
+## 08.09.2026 - Fully visible system information in alerts
 
-## 08.09.2026 – Watchlist-Sektoren, Projekte und externe Systemlinks
+Status: deployed on 08.09.2026 at 22:31 CEST. Release: `20260908-alert-row-fix`.
 
-Status: am 08.09.2026 um 20:31 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-watchlist-labels-links`.
+- The controller/system row previously allowed only 16-18 pixels for 22-pixel information chips. It now provides 24 pixels including padding. Footer spacing compensates for the extra room; overall height and faction cards remain unchanged.
+- A regression test checks full visibility on desktop, tablet and phone. All three browser checks, lint, production build and type checking passed; public health returned HTTP 200. No backend restart was required.
 
-- Sektor und Projektname lassen sich über das Stiftsymbol direkt am System bearbeiten. Persönliche Angaben bleiben benutzerspezifisch; globale und geschützte Watchlists teilen mandantenspezifische Zuordnungen, die Leadership und Admins bearbeiten können.
-- Sektor- und Projektfilter stehen in allen drei Watchlists zur Verfügung. Gemeinsame Filteroptionen stammen aus dem vollständigen Systembestand; die Filterung erfolgt vor der Seitenauswahl.
-- Jeder Systemstreifen enthält ein Dropdown für Raven Colonial, Inara und Spansh. Spansh wird beim Öffnen über den vorhandenen Systemcache aufgelöst. Die zusätzliche Schaltfläche „Open Full System Information“ entfällt, „Record Details“ bleibt erhalten.
-- Auf Smartphones stehen die Aktionen unter den Systemangaben, damit Systemname, Sektor und Projekt lesbar bleiben.
-- Prüfung: 157 Unit-Tests und 32 Browserprüfungen erfolgreich (vier bildschirmabhängige Prüfungen planmäßig übersprungen), einschließlich Bearbeitung, Filterung und Dialog-Barrierefreiheit auf Desktop, Tablet und Smartphone. Typprüfung, Lint und Produktionsbuild erfolgreich. Öffentlicher Healthcheck HTTP 200, neue Endpunkte ohne Sitzung HTTP 401.
+## 08.09.2026 - Discord embeds and Alert Center
 
-## 08.09.2026 – BGS-Paketzuordnungen und Auswertung lückenhafter Snapshots
+Status: deployed to [valk-elite.de](https://valk-elite.de) on 08.09.2026 at 22:19 CEST. Release: `20260908-discord-embeds`.
 
-Status: am 08.09.2026 um 20:01 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260908-bgs-alert-repair`.
+- Automatic and manually sent BGS alerts use the same Discord embed: linked system title, severity colour, status, and highlighted historical trigger value and threshold.
+- Compact fields show only the relevant factions, with current influence, government, allegiance, active and pending states. System information, external links and separate timestamps complete the message. Missing current data does not prevent delivery.
+- Native Discord formatting respects field limits, escapes Markdown and disables mentions. Existing delivery queues and retries are preserved. Previously sent messages are not modified.
+- Dashboard heading standardised to "Alert Center".
+- Validation: 36 backend tests with simulated Discord delivery passed, as did lint, production build and type checking. The live 39 Tauri alert's two factions and stored 1.87 pp gap were checked without sending a test message.
+- Deployment-time backend backup: `/home/valk/dashboard-v2/shared/discord-embeds-backup-20260908/`. The previous dashboard release was retained at deployment.
+
+## 08.09.2026 - Compact alert strips with faction context
+
+Status: deployed on 08.09.2026 at 21:58 CEST. Release: `20260908-alert-faction-strips`.
+
+- Alert cards reuse the Watchlist's system information and faction components. Only factions relevant to the alert are shown; single-faction alerts do not receive an artificial comparison partner.
+- Trigger values and thresholds are highlighted and labelled as historical values. Faction cards show current data; the original message remains expandable. Missing influence is displayed as a dash.
+- Card heights were set to 244 pixels on desktop/tablet and 394 pixels on phones, compared with the sample alert's previous 242.69 and 394.44 pixels. Faction cards can scroll horizontally on small screens.
+- Record Details reflect the selected alert: affected faction rows receive an alert icon and short message, while matching history lines and legend entries are highlighted. Other factions remain visible. Watchlist details still open without alert highlights.
+- Visible systems load in a batch, duplicate systems are combined, and results are shared with the detail view. Added a session-protected POST at `/api/system-watchlist/detail` for up to 100 systems, without backend or database-schema changes.
+- Validation: 168 unit tests and 21 browser checks passed. Two existing unit tests exceeded their parallel timeout and passed in isolation. Card heights, keyboard access, faction selection and different alerts for one system were checked on desktop, tablet and phone. Type checking, lint and production build passed.
+- Live checks using the existing jjt session confirmed system data, batch loading and faction matching for the stored 1.87 pp gap. No Discord test message was sent; the previous release was retained at deployment.
 
-- Katalogregeln vergleichen die letzten verfügbaren abgeschlossenen Snapshots je System, auch über mehrere Tage hinweg. Fensterbasierte Regeln akzeptieren ältere Vergleichsdaten und nennen die tatsächliche Zeitspanne.
-- Später eintreffende oder korrigierte Snapshots werden erneut ausgewertet; eindeutige Alarmkennungen verhindern Duplikate. Die Start-Baseline neuer Pakete bleibt erhalten.
-- Leere Katalogpakete werden als „no rules“ angezeigt und können wiederhergestellt werden. Beim Löschen der letzten Paketregel entfernt das Backend die leere Zuordnung; der Katalog wird aktualisiert.
-- Reparaturskript mit lesender Vorschau und verpflichtender Sicherung ergänzt. Zwei leere Mandantenpakete mit insgesamt acht Regeln sowie der weiterhin aktive persönliche Abstandsalarm für „Preae Aihm DN-I c23-44“ wurden wiederhergestellt, ohne historische Discord-Nachrichten nachzusenden.
-- Prüfung: 28 Backend-Tests, 148 Dashboard-Unit-Tests, neun Browserprüfungen auf Desktop/Tablet/Smartphone, Typprüfung und Lint der geänderten TypeScript-Dateien. Lokaler Turbopack-Build und Serverbuild mit Webpack erfolgreich. Der Reparaturlauf wurde zweimal auf einer Datenbankkopie auf Duplikatfreiheit geprüft.
-- Live-Auswertung: zwölf Regeln und 6.828 Regel/System-Kombinationen geprüft. Für das Beispielsystem sind alle persönlichen und globalen Auswertungsstände „ok“; der rekonstruierte Alarm ist aktiv. Öffentlicher Healthcheck erfolgreich, Regelzugriff ohne Sitzung weiterhin HTTP 401.
-- Sicherung von Backend-Dateien und Mandantendatenbank: `/home/valk/dashboard-v2/shared/bgs-repair-20260908/`. Das bisherige Dashboard-Release bleibt für einen Rollback erhalten.
+## 08.09.2026 - Alert system details and individual Discord delivery
 
-## 03.09.2026 – Einheitliche Evaluations-Details und periodenabhängige Discord-Berichte
+Status: deployed on 08.09.2026 at 21:06 CEST. Release: `20260908-alert-actions`.
 
-Status: am 03.09.2026 um 10:59 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260903-104316-evaluation-details-discord-period`.
+- Each card starts with a gold, clickable system name. It opens the Watchlist's Record Details panel, including influence history. Data loads on demand, independently of the personal Watchlist.
+- Each alert has links to Raven Colonial, Inara, Spansh, EDGIS and Record Details. Long system names wrap fully on small screens.
+- Leadership and Admin users can send a visible alert, including their own personal alert, to the tenant's BGS channel. Intentional resending is supported; unique request IDs and atomic queue entries prevent duplicates from double clicks or repeated requests.
+- Delivery status, last successful delivery and errors are shown. Pending delivery refreshes every five seconds. Messages include system, alert text, severity, timestamps and status; read and acknowledgement states are unchanged.
+- Validation: 31 backend tests, 160 dashboard unit tests and 18 browser checks passed, along with type checking, lint and production build. Delivery and retries used simulated Discord responses.
+- Live checks confirmed alert metadata, the configured BGS webhook and system details. An invalid delivery request returned HTTP 400 without sending a message. The temporary EDDN database lock caused by startup maintenance had cleared by the final check.
+- Deployment-time backup: `/home/valk/dashboard-v2/shared/alert-actions-backup-20260908/`. The previous dashboard release was retained at deployment.
 
-### Geändert und behoben
+## 08.09.2026 - Watchlist sectors, projects and external system links
 
-- Die Detailtabelle in Evaluations verwendet nun dieselben 15 Spalten in derselben Reihenfolge wie die Detailtabelle im Leaderboard.
-- „Send Discord Report“ übermittelt die ausgewählte vordefinierte Periode sowie eigene Datums- und Monatsbereiche an das Backend; vollständige und Top-5-Berichte bleiben dabei erhalten.
-- Unvollständige eigene Zeiträume deaktivieren den Versand und werden zusätzlich serverseitig abgelehnt, statt stillschweigend auf „All“ zurückzufallen.
-- Preference-Schema auf Version 5 angehoben, damit bestehende Evaluations-Ansichten einmalig die vollständige neue Standardspaltenauswahl erhalten.
-- Die BGS-Alertliste ist auf kleinen Ansichten per Tastatur fokussierbar, damit der horizontale Scrollbereich zugänglich bleibt.
-- OpenAPI-Vertrag, generierte Typen sowie Unit- und Browser-Tests für Spaltenreihenfolge und Discord-Payloads erweitert.
+Status: deployed on 08.09.2026 at 20:31 CEST. Release: `20260908-watchlist-labels-links`.
 
-### Deployment und Prüfung
+- Edit sector and project labels directly using the pencil icon. Personal labels remain user-specific; global and protected Watchlists share tenant-specific labels editable by Leadership and Admin users.
+- Sector and project filters are available in all three Watchlists. Shared options come from the complete system list; filtering happens before pagination.
+- Each system strip includes Raven Colonial, Inara and Spansh links. Spansh is resolved using the existing system cache when opened. Removed "Open Full System Information"; "Record Details" remains.
+- On phones, actions appear below system information so names, sectors and projects stay readable.
+- Validation: 157 unit tests and 32 browser checks passed, with four screen-specific cases intentionally skipped. Editing, filtering and accessible dialogs were checked on desktop, tablet and phone. Type checking, lint and production build passed. Public health returned HTTP 200; new endpoints without a session returned HTTP 401.
 
-- Lint, TypeScript-Prüfung, Linux-Produktionsbuild, 146 Unit-Tests und die vollständige Browser-Testmatrix mit 29 erfolgreichen und 4 planmäßig übersprungenen Tests ausgeführt.
-- Den neuen Linux-Release separat gebaut und vor der Umschaltung intern geprüft; anschließend öffentliche HTTPS-, Authentifizierungs-, Better-Auth-, Datenparitäts-, Evaluations-, EDDN-, Watchlist-, Benutzerverwaltungs- und Preference-Smoke-Tests für alle drei Mandanten erfolgreich ausgeführt.
-- Saved-Views-Smoke an Schema-Version 5 angepasst; alle temporären Benutzer-, Sitzungs-, View- und Watchlist-Daten wurden durch die Tests entfernt.
-- Den vorherigen Dashboard-Release, das hochgeladene Deployment-Archiv und die Staging-Reste nach erfolgreicher Produktivprüfung entfernt.
+## 08.09.2026 - BGS package assignments and sparse snapshot evaluation
 
-## 03.09.2026 – Perioden- und Kennzahlenanalyse für Evaluations
+Status: deployed on 08.09.2026 at 20:01 CEST. Release: `20260908-bgs-alert-repair`.
 
-Status: am 03.09.2026 um 01:27 MESZ auf [valk-elite.de](https://valk-elite.de) deployt. Release-Kennung: `20260903-012139-evaluation-period-metrics`.
+- Catalog rules compare the latest available settled snapshots for each system, including gaps of several days. Window-based rules accept older comparison data and report the actual interval.
+- Late or corrected snapshots are re-evaluated; unique alert IDs prevent duplicates. New packages retain their initial baseline behaviour.
+- Empty catalog packages show "no rules" and can be restored. Deleting a package's last rule removes the empty backend assignment and refreshes the catalog.
+- Added a repair script with read-only preview and mandatory backup. Restored two empty tenant packages with eight rules in total, plus the still-active personal gap alert for Preae Aihm DN-I c23-44, without resending historical Discord messages.
+- Validation: 28 backend tests, 148 dashboard unit tests, nine browser checks, type checking and targeted lint passed. Local Turbopack and server Webpack builds passed. The repair ran twice on a database copy to verify duplicate prevention.
+- Live evaluation checked 12 rules and 6,828 rule/system combinations. Personal and global evaluation states for the sample system were "ok"; the restored alert was active. Public health passed; unauthenticated rule access remained HTTP 401.
+- Deployment-time backup: `/home/valk/dashboard-v2/shared/bgs-repair-20260908/`. The previous dashboard release was retained for rollback at deployment.
 
-### Hinzugefügt
+## 03.09.2026 - Consistent Evaluation details and period-specific Discord reports
 
-- Perioden- und Kennzahlauswahl in Evaluations entsprechend dem Leaderboard ergänzt, einschließlich eigener Datums- und Monatsbereiche.
-- Visual Analysis kann zwischen Summen als Balkendiagramm und historischem Verlauf als Liniendiagramm wechseln.
-- Historische UTC-Zeitfenster für Tag, Woche, Monat, Jahr, die letzten zwölf Monate sowie Current Tick und Last Tick ergänzt.
-- Eigene, mandantenfähige History-API mit den zwölf Leaderboard-Kennzahlen, Top 10 in der vollständigen Ansicht und Top 5 in der kompakten Ansicht ergänzt.
+Status: deployed on 03.09.2026 at 10:59 CEST. Release: `20260903-104316-evaluation-details-discord-period`.
 
-### Geändert und geprüft
+- Evaluation details now use the same 15 columns in the same order as Leaderboard details.
+- "Send Discord Report" passes the selected preset, custom dates or month range to the backend, preserving full and Top-5 reports.
+- Incomplete custom periods disable sending and are rejected server-side instead of silently falling back to "All".
+- Preference schema version 5 gives existing Evaluation views the complete default column selection once.
+- The BGS alert list is keyboard-focusable in narrow layouts so its horizontal scroll area is accessible.
+- Updated OpenAPI, generated types, unit and browser tests for column order and Discord payloads.
+- Validation: lint, TypeScript, Linux production build, 146 unit tests and the full browser matrix passed: 29 successful checks and four intentional skips.
+- Built the Linux release separately and checked it internally before switching. Public HTTPS, authentication, Better Auth, data parity, Evaluations, EDDN, Watchlist, user administration and preference smoke checks passed for all three tenants.
+- Updated the Saved Views smoke test for schema version 5; temporary users, sessions, views and Watchlist data were cleaned up.
+- Removed the previous dashboard release, uploaded deployment archive and staging leftovers after production verification.
 
-- Die Evaluations-Detailtabelle folgt der gewählten Periode, bleibt aber unabhängig von der ausgewählten Kennzahl.
-- Preference-Schema auf Version 4 erweitert; Diagrammtyp, Periode und Kennzahl werden in URL und gespeicherten Views berücksichtigt.
-- Produktionsbuild, 141 Unit-Tests und der Evaluations-Browser-Test auf Desktop, Tablet und Smartphone erfolgreich ausgeführt.
-- Das neue Linux-Release vor der Umschaltung separat gebaut und intern geprüft; anschließend Health-, HTTPS-, Authentifizierungs-, Datenparitäts- und Evaluations-History-Smoke-Tests erfolgreich ausgeführt.
-- Alte serverseitige Dashboard-Releases, Datenbank- und Deployment-Sicherungen sowie Staging-Reste nach erfolgreicher Produktivprüfung entfernt.
+## 03.09.2026 - Period and metric analysis for Evaluations
 
-## 30.08.2026 – Einheitliches Aktualisieren und persönliche Views
+Status: deployed on 03.09.2026 at 01:27 CEST. Release: `20260903-012139-evaluation-period-metrics`.
 
-Status: am 30.08.2026 um 23:20 MESZ auf [valk-elite.de](https://valk-elite.de) deployt; zum Zeitpunkt der Changelog-Erstellung noch ohne eigenen Git-Commit. Grundlage ist `5bf927f` plus die Änderungen im Arbeitsverzeichnis. Release-Kennung: `20260830-saved-views-225358`.
+- Added Leaderboard-style period and metric selectors, including custom date and month ranges. Visual Analysis switches between totals as bars and historical trends as lines.
+- Added historical UTC windows for day, week, month, year, the last twelve months, Current Tick and Last Tick.
+- Added a tenant-aware history API with twelve Leaderboard metrics, Top 10 in the full view and Top 5 in the compact view.
+- Evaluation details follow the selected period independently of the selected metric.
+- Preference schema version 4 includes chart type, period and metric in URLs and saved views.
+- Validation: production build, 141 unit tests and Evaluation browser tests on desktop, tablet and phone passed.
+- Built and checked the Linux release before switching; health, HTTPS, authentication, data parity and Evaluation history smoke tests passed.
+- Removed old server dashboard releases, database/deployment backups and staging leftovers after production verification.
 
-### Hinzugefügt
+## 30.08.2026 - Consistent refresh controls and personal views
 
-- Persönliche, serverseitig gespeicherte Views für die filterbaren Dashboard-Ansichten: Analyse- und Operationsseiten, BGS Watchlist, BGS Alerts, Data Explorer und Verwaltung geschützter Fraktionen.
-- Views speichern je nach Seite Suche, Filter, Sortierung, sichtbare Spalten, Seitengröße, Zeitraum, Kennzahl und Ansichtsvariante. In der Watchlist wird auch der gewählte Bereich beziehungsweise die geschützte Fraktion berücksichtigt.
-- Views unter einem Namen speichern, wieder aufrufen, aktualisieren, umbenennen und nach Bestätigung löschen. Anzeige, wenn die aktuelle Ansicht vom gespeicherten Stand abweicht.
-- Bis zu 20 Views pro Seite und Benutzer; Namen mit maximal 64 Zeichen, ohne Duplikate unabhängig von Groß-/Kleinschreibung. Zusätzlich gilt die bestehende Backend-Grenze von 16 KB pro Sammlung.
-- Gemeinsame Seitensteuerung für Zurücksetzen und Aktualisieren sowie ein einheitliches View-Menü.
+Status: deployed on 30.08.2026 at 23:20 CEST. At the time this entry was originally written, these changes had no separate Git commit and were based on `5bf927f` plus working-directory changes. Release: `20260830-saved-views-225358`.
 
-### Geändert und behoben
+- Added personal server-stored views for filterable Analytics and Operations pages, BGS Watchlist, BGS Alerts, Data Explorer and protected-faction administration.
+- Depending on the page, views save search, filters, sorting, columns, page size, period, metric and presentation mode. Watchlist views also include the selected scope or protected faction.
+- Save named views, restore, update, rename and delete them after confirmation. An indicator shows when the current view differs from its saved state.
+- Up to 20 views per page and user, with names up to 64 characters and case-insensitive uniqueness. The existing backend limit of 16 KB per collection also applies.
+- Added shared reset/refresh controls and a consistent Views menu.
+- The previously inactive "Updated just now" button refreshes the current page and resets its view to defaults while retaining saved views. Local "Refresh" buttons reload data while preserving filters and sorting.
+- Resetting or restoring a view handles relevant URL parameters and resets local pagination when needed. View state does not leak between feature pages; signing out clears the query cache.
+- Working view settings are saved after a delay; explicit view actions save immediately. Writes are serialised. Save failures are visible; unconfirmed saved-view changes roll back while current working filters remain.
+- Input entered before loading finishes is preserved when saved settings arrive.
+- Preference schema version 3 stores the working view, active view ID and named views while continuing to read older single-view settings. Legacy Watchlist sorting is used as the initial state; watched systems remain separate from view preferences.
+- The actual UTF-8 payload size, including its Flask envelope, is checked with a clear error above 16 KB.
+- Added unit tests for view schema, page controls and API size limits; browser tests cover refresh behaviour and named views.
+- Added `deploy/saved-views-smoke.py`, which removes temporary views and short-lived sessions without overwriting existing preferences.
+- Validation: lint, TypeScript, Linux production build, 90 unit tests and relevant desktop/tablet/phone browser checks passed. Saving, renaming, resetting, restoring and deleting were verified over public HTTPS for all three tenants. User isolation was checked with multiple available test users in one tenant.
+- Built and checked the release separately before switching; the previous release was retained for rollback. This deployment did not change Flask, Streamlit or the Discord bot.
 
-- Die bisher funktionslose Schaltfläche „Updated just now“ aktualisiert die aktuelle Seite und setzt deren Ansichtseinstellungen auf die Standardwerte zurück. Gespeicherte Views bleiben erhalten.
-- Lokale „Refresh“-Schaltflächen laden Daten neu und behalten Filter und Sortierungen bei.
-- Zurücksetzen und Wiederaufrufen einer View berücksichtigen auch die relevanten URL-Parameter und setzen die lokale Seitennavigation bei Bedarf zurück.
-- View-Zustände werden beim Wechsel zwischen Funktionsseiten nicht versehentlich übernommen; beim Abmelden wird der Abfrage-Cache geleert.
-- Laufende Ansichtseinstellungen werden verzögert gespeichert, explizite View-Aktionen ohne diese Verzögerung. Schreibzugriffe werden nacheinander ausgeführt.
-- Speicherfehler werden sichtbar angezeigt. Nicht bestätigte Änderungen an gespeicherten Views werden zurückgenommen, während die aktuellen Arbeitsfilter erhalten bleiben.
-- Bereits vor Abschluss des Ladens vorgenommene Benutzereingaben werden beim Übernehmen gespeicherter Einstellungen berücksichtigt.
+## 30.08.2026, 16:43 - Correct faction rule catalog labels
 
-### Datenkompatibilität und Qualität
+Commit: [5bf927f - Fix protected faction catalog labels](https://github.com/JanJonTheo/VALKDashboardV2/commit/5bf927f445aefd4d192751ac59b1ce5b813277fd)
 
-- Preference-Schema auf Version 3 mit aktueller Ansicht, aktiver View-ID und benannten Views erweitert. Bisherige einzelne View-Einstellungen bleiben lesbar.
-- Alte Watchlist-Sortierungen werden als Ausgangszustand übernommen. Die eigentliche Liste beobachteter Systeme bleibt von den Ansichtseinstellungen getrennt.
-- Prüfung der tatsächlichen UTF-8-Größe einschließlich des an Flask gesendeten Umschlags; verständliche Fehlermeldung bei Überschreitung der 16-KB-Grenze.
-- Unit-Tests für View-Schema, Seitensteuerung und API-Größenlimit sowie Browser-Tests für die unterschiedlichen Refresh-Funktionen und benannte Views ergänzt.
-- Wiederverwendbaren Live-Test `deploy/saved-views-smoke.py` ergänzt: temporäre Views und kurzlebige Sitzungen werden nach dem Test bereinigt, vorhandene Benutzereinstellungen nicht überschrieben.
-- Verifiziert: Lint, TypeScript, Linux-Produktionsbuild, 90 Unit-Tests und Browser-Tests der betroffenen Funktionen auf Desktop, Tablet und Smartphone.
-- Speicherung, Umbenennen, Zurücksetzen, Wiederaufrufen und Löschen über die öffentliche HTTPS-Adresse in allen drei konfigurierten Mandanten geprüft. Benutzertrennung im Mandanten mit mehreren verfügbaren Testnutzern geprüft.
-- Neues Release separat gebaut und vor der Umschaltung intern geprüft; vorherige Version als Rollback erhalten. Keine Änderung an Flask, Streamlit oder dem Discord-Bot für dieses Deployment.
+- Protected-faction conditions now say "Protected faction" instead of "Tenant faction" in the catalog and template editor.
+- Added target-specific labels for influence loss, new conflicts, threshold breaches and approaching factions, while preserving tenant-faction labels.
+- Added unit and browser coverage for target-specific wording.
 
-## 30.08.2026, 16:43 – Korrekte Bezeichnungen im Fraktions-Regelkatalog
+## 30.08.2026, 15:12 - Visible faction webhook input
 
-Commit: [5bf927f – Fix protected faction catalog labels](https://github.com/JanJonTheo/VALKDashboardV2/commit/5bf927f445aefd4d192751ac59b1ce5b813277fd)
+Commit: [568abbb - Show protected faction webhook input](https://github.com/JanJonTheo/VALKDashboardV2/commit/568abbb35ed3050ca4ce5e5f999c8b42547198e0)
 
-- Bedingungen für geschützte Fraktionen werden in Katalog und Vorlageneditor als „Protected faction“ statt fälschlich als „Tenant faction“ bezeichnet.
-- Zielabhängige Bezeichnungen für Einflussverlust, neue Konflikte, Unterschreiten eines Schwellenwerts und Annäherung anderer Fraktionen ergänzt.
-- Bestehende Bezeichnungen für mandanteneigene Fraktionen beibehalten.
-- Unit- und Browser-Tests für die zielabhängigen Texte ergänzt.
+- New or replacement Discord webhook URLs are visible while entered instead of masked as passwords. The field uses a URL input with spellcheck disabled.
+- Stored webhook URLs are still never returned to the browser. Updated unit and browser tests.
 
-## 30.08.2026, 15:12 – Sichtbare Eingabe von Fraktions-Webhooks
+## 30.08.2026, 14:42 - Faction autocomplete
 
-Commit: [568abbb – Show protected faction webhook input](https://github.com/JanJonTheo/VALKDashboardV2/commit/568abbb35ed3050ca4ce5e5f999c8b42547198e0)
+Commit: [ac3e401 - Fix protected faction autocomplete](https://github.com/JanJonTheo/VALKDashboardV2/commit/ac3e4013aeb66dbf5c54c97388934a0304560ba5)
 
-- Das Eingabefeld für neue beziehungsweise ersetzte Discord-Webhooks zeigt die eingegebene URL an, statt sie wie ein Passwort zu maskieren.
-- URL-Eingabetyp verwendet und Rechtschreibprüfung deaktiviert.
-- Bereits gespeicherte Webhook-URLs werden weiterhin nicht an den Browser zurückgegeben.
-- Zugehörige Unit- und Browser-Tests angepasst.
+- Replaced the native suggestion list with a dashboard-styled EDDN autocomplete.
+- Supports mouse selection, arrow keys and Enter, and closes on Escape or focus change. Added accessible combobox/listbox semantics and active selection.
+- Loading and no-results states are visible; entering an exact faction name manually remains possible. Stale suggestions are hidden while the query changes.
+- Updated suggestion and selection tests.
 
-## 30.08.2026, 14:42 – Fraktions-Autovervollständigung
+## 30.08.2026, 14:13 - Protected-faction administration
 
-Commit: [ac3e401 – Fix protected faction autocomplete](https://github.com/JanJonTheo/VALKDashboardV2/commit/ac3e4013aeb66dbf5c54c97388934a0304560ba5)
+Commit: [e2375a0 - Add protected faction administration](https://github.com/JanJonTheo/VALKDashboardV2/commit/e2375a0b2d7e14d1ce4986dd1bbec5fcf5e78157)
 
-- Native Vorschlagsliste durch eine explizite, im Dashboard gestaltete EDDN-Autovervollständigung ersetzt.
-- Auswahl per Maus sowie Pfeiltasten und Enter; Schließen per Escape oder Fokuswechsel.
-- Zugängliche Combobox-/Listbox-Semantik und aktive Auswahl ergänzt.
-- Ladezustand und fehlende Treffer sichtbar gemacht; freie Eingabe eines exakten Fraktionsnamens bleibt möglich.
-- Veraltete Suchvorschläge werden während einer geänderten Suchanfrage nicht angezeigt.
-- Tests für Vorschläge und Auswahlverhalten aktualisiert.
+- Added `/admin/protected-factions`, navigation and access checks. List, search, filter by active status, create and edit protected factions.
+- Enter a faction name with optional EDDN suggestions, description and optional Discord webhook.
+- Deactivation requires confirmation; permanent deletion additionally requires typed confirmation.
+- Test stored webhooks without exposing their URLs; webhook management is write-only.
+- Added protected API routes for administration, candidate lookup and webhook testing. Extended OpenAPI, generated types and permission, component and browser tests.
 
-## 30.08.2026, 14:13 – Verwaltung geschützter Fraktionen
+## 30.08.2026, 11:03 - Native deployment scripts
 
-Commit: [e2375a0 – Add protected faction administration](https://github.com/JanJonTheo/VALKDashboardV2/commit/e2375a0b2d7e14d1ce4986dd1bbec5fcf5e78157)
+Commit: [32a93bc - Fix native deployment scripts](https://github.com/JanJonTheo/VALKDashboardV2/commit/32a93bc11e9271d389feac613b55d039634d4993)
 
-- Admin-Seite `/admin/protected-factions` einschließlich Navigation und Zugriffsprüfung hinzugefügt.
-- Geschützte Fraktionen auflisten, suchen, nach Aktivstatus filtern, anlegen und bearbeiten.
-- Fraktionsname mit optionalen EDDN-Vorschlägen, Beschreibung und optionalem Discord-Webhook erfassen.
-- Deaktivieren mit Bestätigung sowie dauerhaftes Löschen mit zusätzlicher Texteingabe zur Bestätigung.
-- Gespeicherte Webhooks testen, ohne ihre URLs offenzulegen; Webhook-Verwaltung als reine Schreibeingabe umgesetzt.
-- Geschützte API-Routen für Verwaltung, Kandidatensuche und Webhook-Test ergänzt.
-- OpenAPI-Vertrag, generierte Typen sowie Berechtigungs-, Komponenten- und Browser-Tests erweitert.
+- Marked `start-native.sh`, `ensure-native.sh` and `install-https-vhost.sh` executable in Git.
+- Enforced LF endings for shell scripts using `.gitattributes` to prevent Windows/Linux compatibility problems.
 
-## 30.08.2026, 11:03 – Native Deployment-Skripte
+## 30.08.2026, 10:56 - Protected-faction Watchlist
 
-Commit: [32a93bc – Fix native deployment scripts](https://github.com/JanJonTheo/VALKDashboardV2/commit/32a93bc11e9271d389feac613b55d039634d4993)
+Commit: [f68c0d8 - Add protected factions watchlist](https://github.com/JanJonTheo/VALKDashboardV2/commit/f68c0d8ece475fbb103fb5661987b4e71ac444f8)
 
-- `start-native.sh`, `ensure-native.sh` und `install-https-vhost.sh` im Repository als ausführbar markiert.
-- LF-Zeilenenden für Shell-Skripte über `.gitattributes` festgelegt, um Windows-/Linux-Kompatibilitätsprobleme zu vermeiden.
+- Added protected factions as a BGS Watchlist scope, with faction selection, a protected system-data API, filtering, sorting and pagination.
+- Extended the Rules Catalog with the `protected_faction` target. Early-warning packages can target a protected faction, with package/rule assignments reflected in the interface.
+- Extended OpenAPI and generated types for protected Watchlists and rule targets; added API, component, catalog and browser tests.
 
-## 30.08.2026, 10:56 – Watchlist für geschützte Fraktionen
+## 30.08.2026, 05:10 - BGS warnings in the Command Center
 
-Commit: [f68c0d8 – Add protected factions watchlist](https://github.com/JanJonTheo/VALKDashboardV2/commit/f68c0d8ece475fbb103fb5661987b4e71ac444f8)
+Commit: [98c259c - Add BGS alerts to command center](https://github.com/JanJonTheo/VALKDashboardV2/commit/98c259c6e091426620c91b17f6fe4e74e73fb811)
 
-- Geschützte Fraktionen als zusätzlichen Bereich der BGS Watchlist integriert.
-- Fraktionsauswahl und zugehörige Systemdaten über eine eigene geschützte API-Route angebunden; Filterung, Sortierung und Seitennavigation ergänzt.
-- Regelkatalog um den Zieltyp `protected_faction` erweitert.
-- Frühwarnpakete gezielt auf eine geschützte Fraktion anwenden; zugehörige Paket-/Regelzuordnung in der Oberfläche berücksichtigen.
-- OpenAPI und generierte Typen für geschützte Watchlists und Regelziele erweitert.
-- API-, Komponenten-, Regelkatalog- und Browser-Tests ergänzt.
+- The home page shows active personal and tenant-wide warnings with severity, time, system, rule and read status, plus active/unread counts and a link to the full alert list.
+- Added loading, error and empty states, automatic refresh and a shared BGS alert client.
+- Adjusted Command Center layout and activity charts; extended browser tests.
 
-## 30.08.2026, 05:10 – BGS-Warnungen im Command Center
+## 30.08.2026, 03:56 - Intelligence, Command Center and expanded analytics
 
-Commit: [98c259c – Add BGS alerts to command center](https://github.com/JanJonTheo/VALKDashboardV2/commit/98c259c6e091426620c91b17f6fe4e74e73fb811)
-
-- Aktive persönliche und mandantenweite BGS-Warnungen direkt auf der Startseite angezeigt, einschließlich Schweregrad, Zeit, System, Regel und Gelesen-Status.
-- Anzahl aktiver und ungelesener Warnungen sowie Verknüpfung zur vollständigen Warnungsübersicht ergänzt.
-- Lade-, Fehler- und Leerzustände sowie automatische Aktualisierung der Startseitenwarnungen ergänzt.
-- Gemeinsamen Client zum Laden von BGS-Warnungen eingeführt.
-- Layout des Command Centers und Darstellung des Aktivitätsdiagramms angepasst; Browser-Tests erweitert.
-
-## 30.08.2026, 03:56 – Intelligence, Command Center und erweiterte Analysen
-
-Commit: [3cc8c85 – Expand dashboard intelligence and command center](https://github.com/JanJonTheo/VALKDashboardV2/commit/3cc8c8598bba2c8133922367dd03579c0fb820ce)
+Commit: [3cc8c85 - Expand dashboard intelligence and command center](https://github.com/JanJonTheo/VALKDashboardV2/commit/3cc8c8598bba2c8133922367dd03579c0fb820ce)
 
 ### Command Center
 
-- Startseiten-Kennzahlen und Commander-Aktivität aus den Leaderboard-Daten zusammengeführt: Einfluss, Kopfgutscheine, Erkundungsverkäufe, Kampfprämien und Handelsvolumen.
-- Beitragsanteile mit exakten Werten und Prozentangaben im Aktivitätsdiagramm ergänzt; leere beziehungsweise ungültige Summen berücksichtigt.
-- Anzeige des letzten Galaxy-Ticks, geschätzten nächsten Ticks und Countdowns einschließlich Überfälligkeit ergänzt. Die Schätzung verwendet einen Abstand von 24 Stunden.
-- Navigation, responsive Darstellung und Demo-Daten erweitert.
+- Combined home-page metrics and commander activity from Leaderboard data: influence, bounty vouchers, exploration sales, combat bonds and trade volume.
+- Activity charts include exact contributions and percentages, handling empty or invalid totals.
+- Added the last galaxy tick, estimated next tick and countdown, including overdue status. The estimate uses a 24-hour interval.
+- Extended navigation, responsive layout and demo data.
 
-### BGS Watchlist, Regeln und Warnungen
+### BGS Watchlist, rules and alerts
 
-- Globale Watchlist auf Basis der Systeme mit Präsenz der Mandantenfraktion ergänzt, einschließlich serverseitiger Filterung, Sortierung und Seitennavigation.
-- Watchlist-Statistiken und erweiterte System-/Fraktionsdarstellung einschließlich stabiler Fraktionsfarben und Supermacht-Symbole ergänzt.
-- Persönliche und mandantenweite BGS-Regeln mit System- oder Watchlist-Bezug verwalten; Schwellenwerte, Zeitfenster, Schweregrad und Benachrichtigungsziele konfigurieren.
-- Regelvorlagen und -pakete anzeigen, verwalten, anwenden und synchronisieren; Frühwarnbedingungen für Einflussänderungen, Abstände und Konflikte integriert.
-- Warnungszentrum mit Filtern und persistentem Bearbeitungszustand angebunden.
-- BGS-KI-Oberfläche für Risiko- und Strategieberichte ergänzt, einschließlich passender Berechtigungen und längerer API-Zeitlimits.
-- Persönliche Discord-Webhooks im Konto verwalten und testen; persönliche und mandantenweite Benachrichtigungsziele getrennt validieren.
-- Berechtigungen für persönliche Regeln, Mandantenregeln und BGS-KI ergänzt.
+- Added a global Watchlist based on systems containing the tenant faction, with server-side filtering, sorting and pagination.
+- Added statistics and richer system/faction information with stable faction colours and superpower icons.
+- Manage personal and tenant-wide rules for systems or Watchlists, including thresholds, time windows, severity and notification destinations.
+- View, manage, apply and synchronise rule templates/packages for influence changes, gaps and conflicts.
+- Integrated an Alert Center with filters and persistent processing state.
+- Added BGS AI risk/strategy reports with appropriate permissions and longer API timeouts.
+- Manage and test personal Discord webhooks from the account page; personal and tenant-wide destinations are validated separately.
+- Added permissions for personal rules, tenant rules and BGS AI.
 
 ### Colonisation
 
-- Contributions, Constructions, Commodity-Gruppierung und chronologische Contribution Events erweitert.
-- Mehrfachauswahl für Commander und Waren sowie Filter für System, Status und Datumsbereich ergänzt; aktive Filter und Sortieroptionen in die Oberfläche integriert.
-- Mehrstufige Gruppen unabhängig ein- und ausklappbar gemacht; Sortierung, Kopieraktionen, Fertigstellungsanzeige und Mengen-/Differenzdarstellung verbessert.
-- Aggregation doppelter Beiträge sowie nicht zugeordneter Lieferungen berücksichtigt, ohne vorhandene Ereignisse doppelt zu zählen.
-- Gesamtbedarf und Bausummen beim Filtern konsistent gehalten.
-- Visuelle Auswertung mit Top 5, Top 10 oder Top 25 und Auswahl anhand der jüngsten Ereignisse ergänzt.
+- Expanded Contributions, Constructions, commodity grouping and chronological Contribution Events.
+- Added commander/commodity multi-selection and system, status and date filters, with visible active filters and sorting controls.
+- Nested groups expand independently. Improved sorting, copying, completion indicators, quantities and differences.
+- Aggregates duplicate contributions and unmatched deliveries without double-counting existing events. Total requirements and construction sums remain consistent when filtering.
+- Added visual Top 5, Top 10 and Top 25 analysis and selection based on recent events.
 
-### Data Explorer und technische Ergänzungen
+### Data Explorer and technical additions
 
-- Eigenständigen Data Explorer mit auswählbaren Tabellen und Standardtabelle `event` eingeführt.
-- Legacy-Filter für Commander, Event, Tick-ID, Colonisation und Datum sowie Volltextsuche, serverseitige Sortierung und Seitengröße angebunden.
-- JSON-Detailansicht und CSV-Export ausgewählter Datensätze ergänzt; horizontal und vertikal scrollbar, einschließlich Touch-Bedienung.
-- Zwischenablage-Fallback für Umgebungen ohne verfügbare Clipboard-API ergänzt.
-- EDDN-Metadaten-Backfill-Skript für Fraktionen und passende Laufzeitkonfiguration hinzugefügt.
-- OpenAPI-Verträge, generierte API-Typen, Normalisierung, Demo-Daten und Live-Auth-/Datenparitätsprüfungen erweitert.
-- Unit-, Komponenten-, Browser- und Barrierefreiheitstests für die neuen Funktionen ergänzt.
+- Added a standalone Data Explorer with selectable tables and `event` as the default.
+- Supports legacy commander, event, tick ID, colonisation and date filters, full-text search, server-side sorting and page size.
+- Added JSON record details and CSV export of selected records, with horizontal/vertical scrolling and touch support.
+- Added a clipboard fallback, an EDDN faction-metadata backfill script and runtime configuration.
+- Extended OpenAPI, generated types, normalisation, demo data, live authentication/data-parity checks, and unit, component, browser and accessibility tests.
 
-## 29.08.2026, 03:22 – Erste vollständige Dashboard-Implementierung
+## 29.08.2026, 03:22 - First complete dashboard implementation
 
-Commit: [b460a58 – Build tenant-aware VALK Dashboard V2](https://github.com/JanJonTheo/VALKDashboardV2/commit/b460a58f53df2f9cb03c464ff084bc96422d64ff)
+Commit: [b460a58 - Build tenant-aware VALK Dashboard V2](https://github.com/JanJonTheo/VALKDashboardV2/commit/b460a58f53df2f9cb03c464ff084bc96422d64ff)
 
-### Anwendung und Darstellung
+### Application and presentation
 
-- Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4 und Radix-basierte UI-Grundbausteine eingerichtet.
-- Responsives VALK-Design mit App-Shell, Navigation, Anmeldeseite, Kontoansicht, Metadaten, Manifest und OpenGraph-Bild aufgebaut.
-- TanStack Query für Datenabfragen und Aktualisierungen, TanStack Table für Tabellen und ECharts mit tabellarischer Alternative für Diagramme integriert.
-- Demo-Modus mit unterschiedlichen Benutzerrollen und Beispieldaten ergänzt.
+- Set up Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4 and Radix-based UI components.
+- Built a responsive VALK design with app shell, navigation, sign-in, account page, metadata, manifest and OpenGraph image.
+- Integrated TanStack Query, TanStack Table and ECharts with tabular chart alternatives. Added a demo mode with sample data and different user roles.
 
-### Fachfunktionen
+### Features
 
-- Startseite mit Berichtsübersicht und Kennzahlen umgesetzt.
-- Analyse-Seiten für Leaderboard, Evaluations einschließlich Full/Top-5-Ansicht und Discord-Bericht, Monthly Performance mit KI-Bewertung, Commander, Recruits, eingelöste Kopfgutscheine sowie Space-/Ground-Conflict-Zones hinzugefügt.
-- Zeitraum-, Datums-, Monats- und fachbezogene Filter, Kennzahlenauswahl, Tabellen-/Diagrammansichten, Sortierung und benutzerbezogene Ansichtseinstellungen eingeführt.
-- Objectives mit validierter Eingabe sowie Colonisation-Beiträge, Bauvorhaben, gruppierte Waren-/Commander-Darstellung und Fortschrittsanzeigen umgesetzt.
-- Systeminformationen aus EDDN und 24-Stunden-Fraktionsberichte integriert.
-- Persönliche System-Watchlist mit Favoriten, Sektor-/Projektangaben, Sortierung, Filtern, Einflussverläufen und Fraktions-/Konfliktdetails aufgebaut.
-- Stationsdaten, Systemkarte und Detailansichten über eigene API-Routen angebunden.
-- Erste Data-Explorer- und Service-/Audit-Ansichten sowie Benutzeradministration ergänzt.
+- Built the home-page report overview and metrics.
+- Added Leaderboard, Evaluations with full/Top-5 views and Discord reports, Monthly Performance with AI assessment, Commanders, Recruits, redeemed bounty vouchers and space/ground Conflict Zones.
+- Added period/date/month and domain-specific filters, metric selection, tables/charts, sorting and per-user view settings.
+- Implemented validated Objectives and Colonisation contributions, constructions, grouped commodity/commander views and progress indicators.
+- Integrated EDDN system information and 24-hour faction reports.
+- Built a personal system Watchlist with favourites, sector/project labels, sorting, filtering, influence history and faction/conflict details.
+- Connected station data, system maps and detail views through dedicated API routes. Added initial Data Explorer, service/audit views and user administration.
 
-### Anmeldung und Sicherheit
+### Sign-in and security
 
-- Bestehende mandantenlokale Anmeldung über Benutzername und Passwort an Flask angebunden; Mandantenauswahl und gemerkte Auswahl integriert.
-- Signierte HttpOnly-Sitzungen mit zwölf Stunden Laufzeit und Rollen Member, Leadership und Admin eingeführt.
-- Same-Origin-Backend-for-Frontend mit serverseitiger Auflösung der Mandanten-API-Schlüssel und Datenbankzuordnung eingerichtet.
-- Benutzer anlegen, Rollen ändern, sperren/entsperren, löschen und Passwörter zurücksetzen; Einmalpasswort und verpflichtenden Passwortwechsel unterstützt.
-- Kontoprofil, Passwortwechsel und Zugriffsübersicht hinzugefügt.
-- Better-Auth-Anbindung für explizit verknüpfte Google-/Discord-Konten pro Mandant vorbereitet: keine soziale Selbstregistrierung oder automatische Verknüpfung anhand gleicher E-Mail-Adresse; Sitzungstransfer und verschlüsselte Provider-Tokens berücksichtigt.
-- Sicherheitsheader, Prüfung der Request-Herkunft und sichere öffentliche URL-Konfiguration ergänzt; Mandantenschlüssel und Provider-Geheimnisse bleiben serverseitig.
+- Connected existing tenant-local username/password authentication to Flask, including tenant selection and remembered choices.
+- Added signed HttpOnly sessions lasting twelve hours and Member, Leadership and Admin roles.
+- Set up a same-origin backend-for-frontend with server-side tenant API-key and database resolution.
+- Added user creation, role changes, locking/unlocking, deletion and password resets, including one-time passwords and mandatory password changes.
+- Added account profile, password change and access overview.
+- Prepared Better Auth for explicitly linked Google/Discord accounts per tenant, without social self-registration or automatic linking by matching email. Included session transfer and encrypted provider tokens.
+- Added security headers, request-origin checks and safe public-URL configuration. Tenant keys and provider secrets stay server-side.
 
-### Betrieb, Verträge und Tests
+### Operations, contracts and tests
 
-- Native Node.js-Start- und Healthcheck-Skripte, Laufzeitkonfiguration, SQLite-Runtime-Prüfung sowie nginx-/HTTPS-Einrichtung hinzugefügt.
-- Dockerfile und Compose-Konfiguration als zusätzliche Repository-Artefakte aufgenommen; native Bereitstellung dokumentiert.
-- Hilfsskripte zur Watchlist-Vorbelegung, Laufzeitkonfiguration und Produktionsprüfung von Anmeldung, Benutzerverwaltung, Datenparität und Preferences ergänzt.
-- OpenAPI-3.1-Vertrag und daraus generierte TypeScript-Typen eingeführt.
-- ESLint, Vitest, Testing Library, Playwright und axe-core eingerichtet; Desktop-, Tablet- und Smartphone-Testprofile angelegt.
-- README, Konfigurationsbeispiel, Entwicklungsanweisungen, Paritätsinventar und Deployment-/Rollback-Dokumentation ergänzt.
-- Parallelen Betrieb mit Streamlit und die unveränderte Zuständigkeit des separaten Discord-Bots als Integrationsgrenze dokumentiert.
+- Added native Node.js startup and health scripts, runtime configuration, SQLite runtime checks and nginx/HTTPS setup.
+- Included Dockerfile and Compose as additional repository artifacts; documented native deployment.
+- Added Watchlist-seeding, runtime-configuration and production checks for authentication, user administration, data parity and preferences.
+- Introduced OpenAPI 3.1 and generated TypeScript types.
+- Set up ESLint, Vitest, Testing Library, Playwright and axe-core with desktop, tablet and phone profiles.
+- Added README, configuration example, development instructions, parity inventory and deployment/rollback documentation.
+- Documented parallel operation with Streamlit and the separate Discord bot's unchanged responsibilities as integration boundaries.
 
-## 29.08.2026, 03:19 – Initialer Repository-Stand
+## 29.08.2026, 03:19 - Initial repository
 
-Commit: [c11adc9 – Initial commit](https://github.com/JanJonTheo/VALKDashboardV2/commit/c11adc9c38be7f49db1ac551cde2498ce12a32de)
+Commit: [c11adc9 - Initial commit](https://github.com/JanJonTheo/VALKDashboardV2/commit/c11adc9c38be7f49db1ac551cde2498ce12a32de)
 
-- Repository mit GNU General Public License, Version 3, initialisiert.
-- Noch kein Anwendungscode; dieser folgt mit `b460a58`.
+- Initialised the repository with GNU General Public License version 3.
+- No application code yet; it followed in `b460a58`.
 
-## Pflege
+## Maintenance
 
-- Neue Änderungen oben unter „Noch nicht veröffentlicht“ ergänzen; beim Release Datum, nachvollziehbare Git-Referenz und gegebenenfalls bestätigten Deployment-Status eintragen.
-- Bereits deployte, aber noch nicht committede Änderungen ausdrücklich kennzeichnen und ihre Commit-Referenz nachtragen, sobald sie existiert.
-- Funktionen, Fehlerbehebungen, Sicherheit, Datenkompatibilität, Betrieb und Tests dokumentieren; keine Zugangsdaten oder internen Geheimnisse aufnehmen.
-- Commit- und Deployment-Zeitpunkte nicht gleichsetzen. Änderungen an anderen Repositories nur nennen, wenn sie belegt und Bestandteil des jeweiligen Releases sind.
+- Update this changelog in English with every commit, under the current date, using clear language for users. Include features, fixes, documentation, security, compatibility, operations and relevant validation.
+- Record verified Git references and deployment status when available. Clearly identify deployed changes that have not yet been committed, then add their reference when it exists.
+- Do not include credentials or internal secrets. Do not equate commit times with deployment times. Mention other repositories only when their changes are verified and part of the release.
+- Backup paths in historical entries describe the deployment-time state, not guaranteed current availability. See the [backup inventory](docs/BACKUP-RETENTION.md) for the cleanup performed on 11.09.2026.

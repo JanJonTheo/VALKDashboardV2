@@ -10,6 +10,7 @@ export async function flaskRequest(
   session: DashboardSession,
   timeoutMs = 20_000,
 ): Promise<Response> {
+  request.signal.throwIfAborted();
   const base = process.env.FLASK_API_BASE_URL;
   if (!base) throw new Error("FLASK_API_BASE_URL is not configured");
   const tenant = await getTenantById(session.tenant.id);
@@ -58,20 +59,46 @@ export async function flaskRequest(
       request.headers.get("content-type") ?? "application/json",
     );
   }
-  const response = await fetch(url, {
-    method: request.method,
-    headers,
-    body,
-    cache: "no-store",
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  const signal = AbortSignal.any([
+    request.signal,
+    AbortSignal.timeout(timeoutMs),
+  ]);
+  const startedAt = performance.now();
+  let response: Response;
+  let raw: unknown;
+  try {
+    response = await fetch(url, {
+      method: request.method,
+      headers,
+      body,
+      cache: "no-store",
+      signal,
+    });
+    raw = await response.json().catch(() => {
+      // Reading the response body can time out too; do not turn it into HTTP 200.
+      signal.throwIfAborted();
+      throw new Error("Invalid JSON response from Flask");
+    });
+  } finally {
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (durationMs >= 1_000 || signal.aborted) {
+      console.warn(
+        JSON.stringify({
+          event: "flask_request_timing",
+          path: url.pathname,
+          method: request.method,
+          duration_ms: durationMs,
+          aborted: signal.aborted,
+          correlation_id: correlation,
+        }),
+      );
+    }
+  }
   const responseHeaders = new Headers({
     "content-type": "application/json",
     "x-correlation-id": correlation,
+    "server-timing": `flask;dur=${Math.round(performance.now() - startedAt)}`,
   });
-  const raw = (await response
-    .json()
-    .catch(() => ({ error: "Invalid JSON response from Flask" }))) as unknown;
   if (request.method === "GET" && response.ok) {
     const generated_at = new Date().toISOString();
     if (Array.isArray(raw))

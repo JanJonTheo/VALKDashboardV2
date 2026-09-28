@@ -151,7 +151,15 @@ function upstreamRequest(request: Request, spec: FeatureSpec) {
   }
 
   if (spec.key === "data-explorer") {
-    for (const key of ["page", "page_size", "sort", "direction", "filters"]) {
+    for (const key of [
+      "page",
+      "page_size",
+      "sort",
+      "direction",
+      "filters",
+      "search",
+      "options",
+    ]) {
       const value = incoming.searchParams.get(key);
       if (value) upstream.searchParams.set(key, value);
     }
@@ -197,6 +205,7 @@ function upstreamRequest(request: Request, spec: FeatureSpec) {
   return new Request(upstream, {
     method: request.method,
     headers: request.headers,
+    signal: request.signal,
   });
 }
 
@@ -233,7 +242,11 @@ function explorerPageRequest(
   url.searchParams.delete("scope");
   url.searchParams.delete("options");
   return upstreamRequest(
-    new Request(url, { method: "GET", headers: request.headers }),
+    new Request(url, {
+      method: "GET",
+      headers: request.headers,
+      signal: request.signal,
+    }),
     spec,
   );
 }
@@ -253,6 +266,7 @@ async function loadExplorerRows(
   | { ok: false; response: Response }
 > {
   const loadPage = async (page: number) => {
+    request.signal.throwIfAborted();
     const response = await flaskRequest(
       endpoint,
       explorerPageRequest(request, spec, page),
@@ -415,10 +429,7 @@ export async function GET(
       endpoint = `table/${table}`;
     }
 
-    if (
-      spec.key === "data-explorer" &&
-      (query.get("scope") === "all" || query.get("options") === "1")
-    ) {
+    if (spec.key === "data-explorer" && query.get("scope") === "all") {
       const table = query.get("table")?.trim() || "event";
       const result = await loadExplorerRows(request, spec, endpoint, session);
       if (!result.ok) return result.response;
@@ -429,34 +440,6 @@ export async function GET(
         ],
         table,
       );
-      if (query.get("options") === "1") {
-        return NextResponse.json(
-          {
-            data: [],
-            metrics: {
-              rows: result.rows.length,
-              returned: 0,
-              page: 1,
-              pageSize: explorerPageSize,
-            },
-            generated_at: result.generatedAt,
-            pagination: {
-              page: 1,
-              page_size: explorerPageSize,
-              total: result.rows.length,
-            },
-            meta: {
-              columns,
-              filter_options: collectExplorerFilterOptions(result.rows),
-            },
-          },
-          {
-            headers: {
-              "x-correlation-id": result.correlation ?? correlation,
-            },
-          },
-        );
-      }
       const normalized = normalizeFeaturePayload("data-explorer", {
         data: result.rows,
         generated_at: result.generatedAt,
@@ -490,6 +473,48 @@ export async function GET(
     ]);
     if (!response.ok) return response;
     const envelope = (await response.json()) as Record<string, unknown>;
+    if (spec.key === "data-explorer") {
+      const table = query.get("table")?.trim() || "event";
+      const meta = envelope.meta as
+        | {
+            columns?: string[];
+            filter_options?: {
+              cmdrs?: string[];
+              events?: string[];
+              tickids?: string[];
+            };
+          }
+        | undefined;
+      const options = meta?.filter_options;
+      return NextResponse.json(
+        {
+          ...normalizeFeaturePayload(spec.key, envelope),
+          meta: {
+            columns: orderExplorerColumns(
+              [
+                ...(table === "event" ? EVENT_TABLE_COLUMNS : []),
+                ...(meta?.columns ?? []),
+              ],
+              table,
+            ),
+            ...(options
+              ? {
+                  filter_options: collectExplorerFilterOptions([
+                    ...(options.cmdrs ?? []).map((cmdr) => ({ cmdr })),
+                    ...(options.events ?? []).map((event) => ({ event })),
+                    ...(options.tickids ?? []).map((tickid) => ({ tickid })),
+                  ]),
+                }
+              : {}),
+          },
+        },
+        {
+          headers: {
+            "server-timing": response.headers.get("server-timing") ?? "",
+          },
+        },
+      );
+    }
     if (constructionResponse?.ok) {
       const constructionEnvelope =
         (await constructionResponse.json()) as Record<string, unknown>;
@@ -498,6 +523,7 @@ export async function GET(
     return NextResponse.json(normalizeFeaturePayload(spec.key, envelope), {
       status: response.status,
       headers: {
+        "server-timing": response.headers.get("server-timing") ?? "",
         "x-correlation-id":
           response.headers.get("x-correlation-id") ?? correlation,
       },

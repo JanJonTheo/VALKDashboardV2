@@ -27,6 +27,7 @@ test("alert system details, link menu and individual Discord resend", async ({
             id: "alarm",
             system_name: system,
             rule_name: "Faction gap",
+            facts: {},
             title: `Faction gap · ${system}`,
             message: "Rival closes to a 2 pp gap.",
             severity: "warning",

@@ -10,7 +10,7 @@ type Row = Record<string, unknown>;
 function requestWithQuery(request: Request, query: Record<string, string>) {
   const url = new URL(request.url);
   url.search = new URLSearchParams(query).toString();
-  return new Request(url, { headers: request.headers });
+  return new Request(url, { headers: request.headers, signal: request.signal });
 }
 
 async function rows(response: Response): Promise<Row[]> {
@@ -111,7 +111,21 @@ export async function GET(request: Request) {
         last_tick: lastTick,
         tenant: session.tenant.name,
       },
-      { headers: { "x-correlation-id": correlation } },
+      {
+        headers: {
+          "x-correlation-id": correlation,
+          "server-timing": [
+            leaderboardResponse.headers
+              .get("server-timing")
+              ?.replace("flask;", "leaderboard;"),
+            objectiveResponse.headers
+              .get("server-timing")
+              ?.replace("flask;", "objectives;"),
+          ]
+            .filter(Boolean)
+            .join(", "),
+        },
+      },
     );
   } catch (error) {
     const status = error instanceof AccessError ? error.status : 502;

@@ -336,7 +336,9 @@ test("BGS alert centre exposes persistent alert state", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "HIP 91987", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Acknowledge" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Acknowledge" })).toHaveCount(
+    0,
+  );
   await page.getByRole("button", { name: "Mark read", exact: true }).click();
   const results = await new AxeBuilder({ page }).analyze();
   expect(
@@ -783,7 +785,7 @@ test("protected watchlist applies early warning to one faction", async ({
     "Protected faction loses influence · 3 pp",
   );
   await expect(protectedCatalogCard).toContainText(
-    "Protected faction enters a conflict: Election, War",
+    "Protected faction conflicts & tick updates: Election, War · new conflicts and updates every settled tick, with won days and stakes",
   );
   await expect(protectedCatalogCard).toContainText(
     "Protected faction below threshold · 5 pp",

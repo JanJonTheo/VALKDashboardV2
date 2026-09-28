@@ -334,7 +334,7 @@ describe("BGS rule catalog", () => {
     ).toBeInTheDocument();
     expect(
       within(protectedCard).getByText(
-        "Protected faction enters a conflict: Election, War",
+        "Protected faction conflicts & tick updates: Election, War · new conflicts and updates every settled tick, with won days and stakes",
       ),
     ).toBeInTheDocument();
     expect(

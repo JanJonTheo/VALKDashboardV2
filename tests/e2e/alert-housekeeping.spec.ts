@@ -64,10 +64,13 @@ test("admin resolves and deletes a shared alert", async ({
   await expect(viewsButton).toBeVisible();
   const viewsBounds = (await viewsButton.boundingBox())!;
   const refreshBounds = (await refreshButton.boundingBox())!;
-  expect(Math.abs(viewsBounds.y - refreshBounds.y)).toBeLessThan(1);
-  expect(viewsBounds.x + viewsBounds.width).toBeLessThanOrEqual(
-    refreshBounds.x,
+  expect(viewsBounds.y).toBeGreaterThanOrEqual(
+    refreshBounds.y + refreshBounds.height,
   );
+  const readAllBounds = (await headerActions
+    .getByRole("button", { name: "Mark all as read" })
+    .boundingBox())!;
+  expect(Math.abs(viewsBounds.y - readAllBounds.y)).toBeLessThan(1);
   const card = page.locator(".bgs-alert-card");
   await expect(card.locator("footer button")).toHaveCount(4);
   await expect(card.getByRole("button", { name: "Acknowledge" })).toHaveCount(

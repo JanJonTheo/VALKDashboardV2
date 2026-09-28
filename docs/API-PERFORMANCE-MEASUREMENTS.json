@@ -1,0 +1,461 @@
+{
+  "measured_at": "2026-09-27T08:15:19.213367+00:00",
+  "tenant": "VALK Development",
+  "database_bytes": 91037696,
+  "per_statement_budget_seconds": 3,
+  "measurements": [
+    {
+      "query": "event_count",
+      "plan": ["SCAN event USING COVERING INDEX idx_event_timestamp"],
+      "returned_rows": 1,
+      "count": 47751,
+      "duration_ms": 3.97
+    },
+    {
+      "query": "explorer_first_page",
+      "plan": ["SCAN event USING INDEX idx_event_timestamp"],
+      "returned_rows": 250,
+      "duration_ms": 3.2
+    },
+    {
+      "query": "explorer_late_page",
+      "plan": ["SCAN event USING INDEX idx_event_timestamp"],
+      "returned_rows": 250,
+      "duration_ms": 9.01
+    },
+    {
+      "query": "catalog_distinct_cmdr",
+      "plan": ["SCAN event", "USE TEMP B-TREE FOR DISTINCT"],
+      "returned_rows": 8,
+      "duration_ms": 132.01
+    },
+    {
+      "query": "catalog_distinct_event",
+      "plan": ["SCAN event", "USE TEMP B-TREE FOR DISTINCT"],
+      "returned_rows": 25,
+      "duration_ms": 122.18
+    },
+    {
+      "query": "catalog_distinct_tickid",
+      "plan": ["SCAN event USING COVERING INDEX idx_event_tickid_timestamp"],
+      "returned_rows": 176,
+      "duration_ms": 53.67
+    },
+    {
+      "query": "leaderboard_current_tick",
+      "plan": [
+        "SEARCH e USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH c USING INDEX sqlite_autoindex_cmdr_1 (name=?) LEFT-JOIN",
+        "SCAN mb LEFT-JOIN",
+        "BLOOM FILTER ON ms (event_id=?)",
+        "SEARCH ms USING AUTOMATIC COVERING INDEX (event_id=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SCAN mc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SCAN mf",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 3",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 4",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 7",
+        "CO-ROUTINE t",
+        "COMPOUND QUERY",
+        "LEFT-MOST SUBQUERY",
+        "SEARCH ex USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH se USING INDEX idx_sell_exploration_event_id (event_id=?)",
+        "UNION ALL",
+        "SEARCH ex USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH me USING INDEX idx_multi_sell_exploration_event_id (event_id=?)",
+        "SCAN t",
+        "CORRELATED SCALAR SUBQUERY 8",
+        "SCAN mce",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "INDEX 2",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "CORRELATED SCALAR SUBQUERY 9",
+        "SCAN cc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "returned_rows": 4,
+      "duration_ms": 1066.54
+    },
+    {
+      "query": "leaderboard_all",
+      "plan": [
+        "SCAN e",
+        "SEARCH c USING INDEX sqlite_autoindex_cmdr_1 (name=?) LEFT-JOIN",
+        "BLOOM FILTER ON mb (event_id=?)",
+        "SEARCH mb USING AUTOMATIC COVERING INDEX (event_id=?) LEFT-JOIN",
+        "BLOOM FILTER ON ms (event_id=?)",
+        "SEARCH ms USING AUTOMATIC COVERING INDEX (event_id=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SCAN mc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SCAN mf",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 3",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 4",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 7",
+        "CO-ROUTINE t",
+        "COMPOUND QUERY",
+        "LEFT-MOST SUBQUERY",
+        "SCAN ex",
+        "SEARCH se USING INDEX idx_sell_exploration_event_id (event_id=?)",
+        "UNION ALL",
+        "SCAN ex",
+        "SEARCH me USING INDEX idx_multi_sell_exploration_event_id (event_id=?)",
+        "SCAN t",
+        "CORRELATED SCALAR SUBQUERY 8",
+        "SCAN mce",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "INDEX 2",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "CORRELATED SCALAR SUBQUERY 9",
+        "SCAN cc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "returned_rows": 8,
+      "duration_ms": 1531.82
+    },
+    {
+      "query": "alert_count",
+      "plan": [
+        "SCAN dashboard_bgs_alert USING COVERING INDEX ix_bgs_alert_resolved_at"
+      ],
+      "returned_rows": 1,
+      "count": 179,
+      "duration_ms": 0.16
+    },
+    {
+      "query": "delivery_count",
+      "plan": [
+        "SCAN dashboard_notification_delivery USING COVERING INDEX sqlite_autoindex_dashboard_notification_delivery_1"
+      ],
+      "returned_rows": 1,
+      "count": 177,
+      "duration_ms": 0.08
+    },
+    {
+      "query": "alert_delivery_lookup",
+      "plan": [
+        "SEARCH dashboard_notification_delivery USING INDEX sqlite_autoindex_dashboard_notification_delivery_2 (alert_id=? AND channel=?)",
+        "SCALAR SUBQUERY 1",
+        "SCAN dashboard_bgs_alert",
+        "USE TEMP B-TREE FOR ORDER BY",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "returned_rows": 1,
+      "duration_ms": 1.45
+    },
+    {
+      "query": "leaderboard_current_tick_memory",
+      "plan": [
+        "SEARCH e USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH c USING INDEX sqlite_autoindex_cmdr_1 (name=?) LEFT-JOIN",
+        "SCAN mb LEFT-JOIN",
+        "BLOOM FILTER ON ms (event_id=?)",
+        "SEARCH ms USING AUTOMATIC COVERING INDEX (event_id=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SCAN mc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SCAN mf",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 3",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 4",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 7",
+        "CO-ROUTINE t",
+        "COMPOUND QUERY",
+        "LEFT-MOST SUBQUERY",
+        "SEARCH ex USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH se USING INDEX idx_sell_exploration_event_id (event_id=?)",
+        "UNION ALL",
+        "SEARCH ex USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH me USING INDEX idx_multi_sell_exploration_event_id (event_id=?)",
+        "SCAN t",
+        "CORRELATED SCALAR SUBQUERY 8",
+        "SCAN mce",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "INDEX 2",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "CORRELATED SCALAR SUBQUERY 9",
+        "SCAN cc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "returned_rows": 4,
+      "duration_ms": 1075.21
+    },
+    {
+      "query": "leaderboard_all_memory",
+      "plan": [
+        "SCAN e",
+        "SEARCH c USING INDEX sqlite_autoindex_cmdr_1 (name=?) LEFT-JOIN",
+        "BLOOM FILTER ON mb (event_id=?)",
+        "SEARCH mb USING AUTOMATIC COVERING INDEX (event_id=?) LEFT-JOIN",
+        "BLOOM FILTER ON ms (event_id=?)",
+        "SEARCH ms USING AUTOMATIC COVERING INDEX (event_id=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SCAN mc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SCAN mf",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 3",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 4",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 7",
+        "CO-ROUTINE t",
+        "COMPOUND QUERY",
+        "LEFT-MOST SUBQUERY",
+        "SCAN ex",
+        "SEARCH se USING INDEX idx_sell_exploration_event_id (event_id=?)",
+        "UNION ALL",
+        "SCAN ex",
+        "SEARCH me USING INDEX idx_multi_sell_exploration_event_id (event_id=?)",
+        "SCAN t",
+        "CORRELATED SCALAR SUBQUERY 8",
+        "SCAN mce",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "INDEX 2",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "CORRELATED SCALAR SUBQUERY 9",
+        "SCAN cc",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "returned_rows": 8,
+      "duration_ms": 603.54
+    },
+    {
+      "query": "leaderboard_current_tick_memory_indexed",
+      "plan": [
+        "SEARCH e USING INDEX idx_event_tickid_timestamp (tickid=?)",
+        "SEARCH c USING INDEX sqlite_autoindex_cmdr_1 (name=?) LEFT-JOIN",
+        "SEARCH mb USING INDEX perf_market_buy_event_id (event_id=?) LEFT-JOIN",
+        "SEARCH ms USING INDEX perf_market_sell_event_id (event_id=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR GROUP BY",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=? AND tickid=?)",
+        "SEARCH mc USING COVERING INDEX perf_mission_completed_event_id (event_id=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=? AND tickid=?)",
+        "SEARCH mf USING COVERING INDEX perf_mission_failed_event_id (event_id=?)",
+        "CORRELATED SCALAR SUBQUERY 3",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 4",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 7",
+        "CO-ROUTINE t",
+        "COMPOUND QUERY",
+        "LEFT-MOST SUBQUERY",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=? AND tickid=?)",
+        "SEARCH se USING INDEX idx_sell_exploration_event_id (event_id=?)",
+        "UNION ALL",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=? AND tickid=?)",
+        "SEARCH me USING INDEX idx_multi_sell_exploration_event_id (event_id=?)",
+        "SCAN t",
+        "CORRELATED SCALAR SUBQUERY 8",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=? AND tickid=?)",
+        "SEARCH mce USING COVERING INDEX perf_mission_completed_event_id (event_id=?)",
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "INDEX 2",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "CORRELATED SCALAR SUBQUERY 9",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=? AND tickid=?)",
+        "SEARCH cc USING INDEX perf_commit_crime_event_id (event_id=?)"
+      ],
+      "returned_rows": 4,
+      "matches_baseline": true,
+      "duration_ms": 5.81
+    },
+    {
+      "query": "leaderboard_all_memory_indexed",
+      "plan": [
+        "SEARCH e USING COVERING INDEX perf_event_cmdr_tickid (cmdr>?)",
+        "SEARCH c USING INDEX sqlite_autoindex_cmdr_1 (name=?) LEFT-JOIN",
+        "SEARCH mb USING INDEX perf_market_buy_event_id (event_id=?) LEFT-JOIN",
+        "SEARCH ms USING INDEX perf_market_sell_event_id (event_id=?) LEFT-JOIN",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=?)",
+        "SEARCH mc USING COVERING INDEX perf_mission_completed_event_id (event_id=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=?)",
+        "SEARCH mf USING COVERING INDEX perf_mission_failed_event_id (event_id=?)",
+        "CORRELATED SCALAR SUBQUERY 3",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 4",
+        "SEARCH rv USING INDEX idx_redeem_voucher_type_event_id (type=?)",
+        "SEARCH ex USING INTEGER PRIMARY KEY (rowid=?)",
+        "CORRELATED SCALAR SUBQUERY 7",
+        "CO-ROUTINE t",
+        "COMPOUND QUERY",
+        "LEFT-MOST SUBQUERY",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=?)",
+        "SEARCH se USING INDEX idx_sell_exploration_event_id (event_id=?)",
+        "UNION ALL",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=?)",
+        "SEARCH me USING INDEX idx_multi_sell_exploration_event_id (event_id=?)",
+        "SCAN t",
+        "CORRELATED SCALAR SUBQUERY 8",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=?)",
+        "SEARCH mce USING COVERING INDEX perf_mission_completed_event_id (event_id=?)",
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "INDEX 2",
+        "SEARCH mci USING INDEX idx_mission_completed_influence_mission_id (mission_id=?)",
+        "CORRELATED SCALAR SUBQUERY 9",
+        "SEARCH ex USING COVERING INDEX perf_event_cmdr_tickid (cmdr=?)",
+        "SEARCH cc USING INDEX perf_commit_crime_event_id (event_id=?)"
+      ],
+      "returned_rows": 8,
+      "matches_baseline": true,
+      "duration_ms": 160.15
+    }
+  ],
+  "indexes": [
+    {
+      "table": "mission_completed_influence",
+      "name": "idx_mission_completed_influence_mission_id",
+      "sql": "CREATE INDEX idx_mission_completed_influence_mission_id ON mission_completed_influence(mission_id)"
+    },
+    {
+      "table": "mission_completed_influence",
+      "name": "idx_mission_completed_influence_event_id",
+      "sql": "CREATE INDEX idx_mission_completed_influence_event_id ON mission_completed_influence(event_id)"
+    },
+    {
+      "table": "dashboard_bgs_alert",
+      "name": "sqlite_autoindex_dashboard_bgs_alert_1",
+      "sql": null
+    },
+    {
+      "table": "dashboard_bgs_alert",
+      "name": "sqlite_autoindex_dashboard_bgs_alert_2",
+      "sql": null
+    },
+    {
+      "table": "dashboard_notification_delivery",
+      "name": "sqlite_autoindex_dashboard_notification_delivery_1",
+      "sql": null
+    },
+    {
+      "table": "dashboard_notification_delivery",
+      "name": "sqlite_autoindex_dashboard_notification_delivery_2",
+      "sql": null
+    },
+    {
+      "table": "dashboard_bgs_alert",
+      "name": "ix_dashboard_bgs_alert_visible",
+      "sql": "CREATE INDEX ix_dashboard_bgs_alert_visible ON dashboard_bgs_alert(owner_scope, owner_user_id, fired_at)"
+    },
+    {
+      "table": "dashboard_bgs_alert",
+      "name": "ix_dashboard_bgs_alert_active",
+      "sql": "CREATE INDEX ix_dashboard_bgs_alert_active ON dashboard_bgs_alert(resolved_at, fired_at)"
+    },
+    {
+      "table": "dashboard_notification_delivery",
+      "name": "ix_dashboard_delivery_due",
+      "sql": "CREATE INDEX ix_dashboard_delivery_due ON dashboard_notification_delivery(status, next_attempt_at)"
+    },
+    {
+      "table": "event",
+      "name": "idx_event_timestamp",
+      "sql": "CREATE INDEX idx_event_timestamp ON event(timestamp)"
+    },
+    {
+      "table": "event",
+      "name": "idx_event_tickid_timestamp",
+      "sql": "CREATE INDEX idx_event_tickid_timestamp ON event(tickid, timestamp)"
+    },
+    {
+      "table": "dashboard_bgs_alert",
+      "name": "ix_bgs_alert_resolved_at",
+      "sql": "CREATE INDEX ix_bgs_alert_resolved_at ON dashboard_bgs_alert(resolved_at)"
+    }
+  ],
+  "candidate_indexes": [
+    "CREATE INDEX perf_market_buy_event_id ON market_buy_event(event_id)",
+    "CREATE INDEX perf_market_sell_event_id ON market_sell_event(event_id)",
+    "CREATE INDEX perf_mission_completed_event_id ON mission_completed_event(event_id)",
+    "CREATE INDEX perf_mission_failed_event_id ON mission_failed_event(event_id)",
+    "CREATE INDEX perf_commit_crime_event_id ON commit_crime_event(event_id)",
+    "CREATE INDEX perf_event_cmdr_tickid ON event(cmdr, tickid)"
+  ],
+  "http": [
+    {
+      "endpoint": "summary/leaderboard?period=ct",
+      "status": 200,
+      "bytes": 1257,
+      "duration_ms": 1295.73
+    },
+    {
+      "endpoint": "summary/leaderboard?period=all",
+      "status": 200,
+      "bytes": 2737,
+      "duration_ms": 1465.25
+    },
+    {
+      "endpoint": "table/event?page=1&page_size=250&sort=timestamp&direction=desc",
+      "status": 200,
+      "bytes": 304257,
+      "duration_ms": 21.95
+    }
+  ],
+  "runtime": {
+    "service": "valkflask",
+    "active": true,
+    "waitress_threads": 1,
+    "journal_window": "24 hours",
+    "journal_lines_sampled": 6192,
+    "task_queue_warning_count": 566,
+    "max_reported_task_queue_depth": 95,
+    "sqlite_locked_mentions": 1
+  },
+  "watchlist_http": {
+    "endpoint": "system-watchlist-data",
+    "history_days": 7,
+    "requested_systems": 86,
+    "status": 200,
+    "bytes": 197533,
+    "returned_systems": 86,
+    "duration_ms": 5714.44
+  }
+}

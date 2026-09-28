@@ -1,6 +1,7 @@
 "use client";
 import { ConflictDetails } from "@/components/conflict-details";
 import { normalizeConflict } from "@/lib/system-watchlist";
+import { DashboardRequestError } from "@/lib/dashboard-request";
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -112,7 +113,11 @@ const emptyColonisationContributionGroups: ColonisationContributionGroup[] = [];
 const emptyColonisationContributionRecords: ColonisationContributionRecord[] =
   [];
 
-async function getFeature(key: string, params: string): Promise<Payload> {
+async function getFeature(
+  key: string,
+  params: string,
+  signal: AbortSignal,
+): Promise<Payload> {
   const query = new URLSearchParams(params);
   if (key === "data-explorer") {
     if (!query.has("page")) query.set("page", "1");
@@ -122,11 +127,13 @@ async function getFeature(key: string, params: string): Promise<Payload> {
   }
   const response = await fetch(`/api/bff/${key}?${query}`, {
     credentials: "same-origin",
+    signal,
   });
   if (!response.ok) {
-    throw new Error(
+    throw new DashboardRequestError(
       (await response.json().catch(() => null))?.error?.message ??
         "Dashboard data is unavailable",
+      response.status,
     );
   }
   return response.json();
@@ -134,14 +141,17 @@ async function getFeature(key: string, params: string): Promise<Payload> {
 
 async function getEvaluationHistory(
   params: string,
+  signal: AbortSignal,
 ): Promise<EvaluationHistoryPayload> {
   const response = await fetch(`/api/bff/evaluations/history?${params}`, {
     credentials: "same-origin",
+    signal,
   });
   if (!response.ok) {
-    throw new Error(
+    throw new DashboardRequestError(
       (await response.json().catch(() => null))?.error?.message ??
         "Evaluation history is unavailable",
+      response.status,
     );
   }
   return response.json();
@@ -324,7 +334,7 @@ export function FeatureDashboard({
     );
   const queryState = useQuery({
     queryKey: ["feature", spec.key, params],
-    queryFn: () => getFeature(spec.key, params),
+    queryFn: ({ signal }) => getFeature(spec.key, params, signal),
     refetchInterval: spec.refreshMs,
     refetchIntervalInBackground: false,
     enabled: canLoad && spec.key !== "data-explorer",
@@ -353,7 +363,8 @@ export function FeatureDashboard({
       "evaluations-history",
       evaluationHistoryParams.toString(),
     ],
-    queryFn: () => getEvaluationHistory(evaluationHistoryParams.toString()),
+    queryFn: ({ signal }) =>
+      getEvaluationHistory(evaluationHistoryParams.toString(), signal),
     refetchInterval: spec.key === "evaluations" ? spec.refreshMs : false,
     refetchIntervalInBackground: false,
     enabled: spec.key === "evaluations" && evaluationChartMode === "history",

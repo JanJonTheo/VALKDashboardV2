@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { DashboardRequestError } from "@/lib/dashboard-request";
 import {
   Activity,
   AlertTriangle,
@@ -93,11 +94,17 @@ function TickCountdown({ nextTick }: { nextTick: Date | null }) {
   );
 }
 
-async function getHome(): Promise<HomePayload> {
-  const response = await fetch("/api/bff/home", { credentials: "same-origin" });
+async function getHome(signal: AbortSignal): Promise<HomePayload> {
+  const response = await fetch("/api/bff/home", {
+    credentials: "same-origin",
+    signal,
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message ?? "Dashboard home is unavailable");
+    throw new DashboardRequestError(
+      body?.error?.message ?? "Dashboard home is unavailable",
+      response.status,
+    );
   }
   return response.json();
 }
@@ -106,7 +113,7 @@ export function HomeDashboard({ session }: { session: DashboardSession }) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["home", session.tenant.id],
-    queryFn: getHome,
+    queryFn: ({ signal }) => getHome(signal),
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });

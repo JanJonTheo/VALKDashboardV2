@@ -19,6 +19,7 @@ export async function proxyDashboardRoute(
       headers: {
         "content-type": "application/json",
         "cache-control": "no-store",
+        "server-timing": response.headers.get("server-timing") ?? "",
         "x-correlation-id":
           response.headers.get("x-correlation-id") ?? crypto.randomUUID(),
       },

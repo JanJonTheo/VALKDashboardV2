@@ -29,7 +29,6 @@ import {
   explorerRowId,
   orderExplorerColumns,
   parseExplorerJson,
-  rowMatchesExplorerSearch,
   rowsToClipboard,
   rowsToCsv,
   type DataExplorerFilterOptions,
@@ -42,6 +41,7 @@ import { PageViewRegistration } from "./page-view-context";
 import { SavedViewsControl } from "./saved-views-control";
 import { viewFilterString, type ViewPreference } from "@/lib/preferences";
 import { useStoredViewPreference } from "@/lib/use-view-preference";
+import { DashboardRequestError } from "@/lib/dashboard-request";
 
 interface ExplorerPayload {
   data: DataExplorerRow[];
@@ -78,10 +78,12 @@ const initialEventFilters: EventFilterState = {
 
 async function fetchExplorer(
   params: URLSearchParams,
+  signal?: AbortSignal,
 ): Promise<ExplorerPayload> {
   const response = await fetch(`/api/bff/data-explorer?${params}`, {
     credentials: "same-origin",
     cache: "no-store",
+    signal,
   });
   const body = (await response.json().catch(() => null)) as
     ExplorerPayload | { error?: { message?: string } } | null;
@@ -90,7 +92,10 @@ async function fetchExplorer(
       body && "error" in body
         ? body.error?.message
         : "Data explorer is unavailable";
-    throw new Error(message || "Data explorer is unavailable");
+    throw new DashboardRequestError(
+      message || "Data explorer is unavailable",
+      response.status,
+    );
   }
   return body as ExplorerPayload;
 }
@@ -288,12 +293,14 @@ export function DataExplorer() {
     const params = new URLSearchParams({
       table,
       page: String(options?.requestedPage ?? page),
-      page_size: String(pageSize),
+      page_size: String(options?.scopeAll ? 250 : pageSize),
       sort: sortColumn,
       direction: sortDirection,
     });
     if (structuredFilters.length)
       params.set("filters", JSON.stringify(structuredFilters));
+    const searchValue = options?.scopeAll ? search.trim() : debouncedSearch;
+    if (searchValue) params.set("search", searchValue);
     if (options?.scopeAll) params.set("scope", "all");
     if (options?.optionCatalog) params.set("options", "1");
     return params;
@@ -302,15 +309,11 @@ export function DataExplorer() {
   const regularParams = makeParams().toString();
   const query = useQuery({
     queryKey: ["data-explorer", "page", regularParams],
-    queryFn: () => fetchExplorer(new URLSearchParams(regularParams)),
-    enabled: dateRangeValid && !debouncedSearch,
+    queryFn: ({ signal }) =>
+      fetchExplorer(new URLSearchParams(regularParams), signal),
+    enabled: dateRangeValid,
   });
   const allParams = makeParams({ requestedPage: 1, scopeAll: true }).toString();
-  const allQuery = useQuery({
-    queryKey: ["data-explorer", "all", allParams],
-    queryFn: () => fetchExplorer(new URLSearchParams(allParams)),
-    enabled: dateRangeValid && Boolean(debouncedSearch),
-  });
   const optionParams = useMemo(
     () =>
       new URLSearchParams({
@@ -323,32 +326,22 @@ export function DataExplorer() {
   );
   const optionsQuery = useQuery({
     queryKey: ["data-explorer", "options", table],
-    queryFn: () => fetchExplorer(new URLSearchParams(optionParams)),
+    queryFn: ({ signal }) =>
+      fetchExplorer(new URLSearchParams(optionParams), signal),
     enabled: table === "event",
     staleTime: 5 * 60_000,
+    retry: false,
   });
 
-  const searchedRows = useMemo(
-    () =>
-      (allQuery.data?.data ?? []).filter((row) =>
-        rowMatchesExplorerSearch(row, debouncedSearch),
-      ),
-    [allQuery.data?.data, debouncedSearch],
-  );
   const displayedRows = useMemo(
-    () =>
-      debouncedSearch
-        ? searchedRows.slice((page - 1) * pageSize, page * pageSize)
-        : (query.data?.data ?? []),
-    [debouncedSearch, page, pageSize, query.data?.data, searchedRows],
+    () => query.data?.data ?? [],
+    [query.data?.data],
   );
-  const total = debouncedSearch
-    ? searchedRows.length
-    : (query.data?.pagination?.total ?? 0);
+  const total = query.data?.pagination?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const activePayload = debouncedSearch ? allQuery.data : query.data;
-  const loading = debouncedSearch ? allQuery.isFetching : query.isFetching;
-  const error = debouncedSearch ? allQuery.error : query.error;
+  const activePayload = query.data;
+  const loading = query.isFetching;
+  const error = query.error;
 
   const columns = useMemo(() => {
     const names = [
@@ -450,14 +443,7 @@ export function DataExplorer() {
   };
 
   const completeRows = async (): Promise<DataExplorerRow[]> => {
-    const activeSearch = search.trim();
-    if (!activeSearch)
-      return (await fetchExplorer(new URLSearchParams(allParams))).data;
-    const payload =
-      allQuery.data ?? (await fetchExplorer(new URLSearchParams(allParams)));
-    return payload.data.filter((row) =>
-      rowMatchesExplorerSearch(row, activeSearch),
-    );
+    return (await fetchExplorer(new URLSearchParams(allParams))).data;
   };
 
   const handleAll = async (action: Exclude<AllAction, null>) => {
@@ -525,7 +511,6 @@ export function DataExplorer() {
             className={styles.refreshButton}
             onClick={() => {
               void query.refetch();
-              if (debouncedSearch) void allQuery.refetch();
               if (table === "event") void optionsQuery.refetch();
             }}
             disabled={loading}

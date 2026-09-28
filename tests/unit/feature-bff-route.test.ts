@@ -16,7 +16,7 @@ vi.mock("@/lib/flask", () => ({
   flaskRequest: mocks.flaskRequest,
 }));
 
-import { POST } from "@/app/api/bff/[feature]/route";
+import { GET, POST } from "@/app/api/bff/[feature]/route";
 
 async function postDiscordReport(body: Record<string, unknown>) {
   return POST(
@@ -33,6 +33,46 @@ async function lastUpstreamBody() {
   const request = mocks.flaskRequest.mock.calls.at(-1)?.[1] as Request;
   return request.clone().json();
 }
+
+describe("cancelled Data explorer scans", () => {
+  it("forwards cancellation and stops scheduling subsequent pages", async () => {
+    const controller = new AbortController();
+    const request = new Request(
+      "https://dashboard.test/api/bff/data-explorer?table=event&scope=all",
+      { signal: controller.signal },
+    );
+    const previousBase = process.env.FLASK_API_BASE_URL;
+    const previousDemo = process.env.VALK_DEMO_MODE;
+    process.env.FLASK_API_BASE_URL = "https://flask.test/api/";
+    process.env.VALK_DEMO_MODE = "false";
+    mocks.requireDashboardSession.mockResolvedValue({
+      tenant: { id: "tenant-1" },
+    });
+    mocks.flaskRequest
+      .mockReset()
+      .mockImplementation(async (_path, upstream: Request) => {
+        expect(upstream.signal.aborted).toBe(false);
+        controller.abort();
+        expect(upstream.signal.aborted).toBe(true);
+        return Response.json({
+          data: [{ id: 1 }],
+          pagination: { total: 2000 },
+        });
+      });
+    try {
+      const response = await GET(request, {
+        params: Promise.resolve({ feature: "data-explorer" }),
+      });
+      expect(response.ok).toBe(false);
+      expect(mocks.flaskRequest).toHaveBeenCalledTimes(1);
+    } finally {
+      if (previousBase === undefined) delete process.env.FLASK_API_BASE_URL;
+      else process.env.FLASK_API_BASE_URL = previousBase;
+      if (previousDemo === undefined) delete process.env.VALK_DEMO_MODE;
+      else process.env.VALK_DEMO_MODE = previousDemo;
+    }
+  });
+});
 
 describe("feature BFF Discord reports", () => {
   beforeEach(() => {
@@ -62,6 +102,61 @@ describe("feature BFF Discord reports", () => {
       mode: "top5",
       period: "cw",
     });
+  });
+
+  it("loads the explorer catalog with one authorized upstream request", async () => {
+    mocks.flaskRequest.mockResolvedValue(
+      Response.json({
+        data: [],
+        pagination: { total: 47750 },
+        meta: {
+          columns: ["id", "cmdr"],
+          filter_options: {
+            cmdrs: ["Beta", "Alpha"],
+            events: ["FSDJump"],
+            tickids: ["2", "10"],
+          },
+        },
+      }),
+    );
+    const response = await GET(
+      new Request(
+        "https://dashboard.test/api/bff/data-explorer?table=event&options=1",
+      ),
+      { params: Promise.resolve({ feature: "data-explorer" }) },
+    );
+    expect(mocks.requireDashboardSession).toHaveBeenCalledWith("admin:read");
+    expect(mocks.flaskRequest).toHaveBeenCalledTimes(1);
+    expect(
+      new URL(mocks.flaskRequest.mock.calls[0][1].url).searchParams.get(
+        "options",
+      ),
+    ).toBe("1");
+    expect((await response.json()).meta.filter_options.cmdrs).toEqual([
+      "Alpha",
+      "Beta",
+    ]);
+  });
+
+  it("forwards global search and paging without downloading all rows", async () => {
+    mocks.flaskRequest.mockResolvedValue(
+      Response.json({
+        data: [{ id: 300 }],
+        pagination: { page: 2, page_size: 25, total: 30 },
+      }),
+    );
+    const response = await GET(
+      new Request(
+        "https://dashboard.test/api/bff/data-explorer?table=event&search=100%25_literal&page=2&page_size=25",
+      ),
+      { params: Promise.resolve({ feature: "data-explorer" }) },
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.flaskRequest).toHaveBeenCalledTimes(1);
+    const params = new URL(mocks.flaskRequest.mock.calls[0][1].url)
+      .searchParams;
+    expect(params.get("search")).toBe("100%_literal");
+    expect(params.get("page")).toBe("2");
   });
 
   it("forwards a selected custom date range", async () => {

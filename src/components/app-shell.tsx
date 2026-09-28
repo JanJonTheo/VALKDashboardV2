@@ -63,6 +63,7 @@ const groups = [
     links: [
       { href: "/operations/objectives", label: "Objectives", icon: Target },
       { href: "/operations/colonisation", label: "Colonisation", icon: Orbit },
+      { href: "/operations/anke-remote", label: "ANKe Remote", icon: Activity },
     ],
   },
   {
