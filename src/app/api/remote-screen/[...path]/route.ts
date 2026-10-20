@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { proxyDashboardRoute } from "@/lib/route-proxy";
 
 const routes: Record<string, RegExp[]> = {
-  GET: [/^devices$/, /^devices\/[a-f0-9]{32}\/commands\/[a-f0-9]{32}$/, /^devices\/[a-f0-9]{32}\/share-candidates$/],
+  GET: [/^devices\/[a-f0-9]{32}\/diagnostics(\/logs\/[a-zA-Z0-9_-]{1,100})?$/, /^devices$/, /^devices\/[a-f0-9]{32}\/commands\/[a-f0-9]{32}$/, /^devices\/[a-f0-9]{32}\/share-candidates$/],
   POST: [/^pairings$/, /^devices\/[a-f0-9]{32}\/viewers$/, /^devices\/[a-f0-9]{32}\/viewers\/[a-f0-9]{32}(\/control)?$/, /^devices\/[a-f0-9]{32}\/commands$/],
   PUT: [/^devices\/[a-f0-9]{32}\/grants$/],
   DELETE: [/^devices\/[a-f0-9]{32}$/, /^devices\/[a-f0-9]{32}\/viewers\/[a-f0-9]{32}(\/control)?$/],

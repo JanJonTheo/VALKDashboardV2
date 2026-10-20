@@ -2,6 +2,14 @@
 
 Changes to VALK Dashboard, listed in reverse chronological order. Dates and times use Europe/Berlin.
 
+
+## 20.10.2026 - v0.2.0 - ANKe diagnostics beside the live screen
+
+- Deployed the production release with authenticated diagnostics, archive search and downloads; verified the public API and removed temporary test records after successful checks.
+
+- Added an offline-capable diagnostics panel with the last 25 operational messages, Discord-style icons and compact text, location details and expandable original messages.
+- Added log archives with type/date filters, bounded pages, text filtering and authenticated downloads. Unpaired client archives remain accessible to their owner until expiry; revoked screen permissions also revoke diagnostic access.
+
 ## 28.09.2026 - ANKe remote monitoring and control
 
 - Prepared the current remote and API performance changes for GitHub, including the English changelog and deployment diagnostics. Release verification: all 209 unit tests and TypeScript checking pass.

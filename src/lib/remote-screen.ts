@@ -1,10 +1,10 @@
 export interface MediaAccess { url: string; token: string; room: string; identity: string }
 export interface RemoteStatus {
-  commander?: string; assist?: string; capture?: string; frame_at?: number;
+  commander?: string; fid?: string; assist?: string; capture?: string; frame_at?: number;
   manual_ready?: boolean; enabled?: boolean; control_enabled?: boolean;
 }
 export interface RemoteDevice {
-  id: string; name: string; owner: boolean; grants: Record<string, string[]>;
+  id: string; name: string; archived?: boolean; owner: boolean; grants: Record<string, string[]>;
   online: boolean; can_control: boolean; operator?: string; status: RemoteStatus;
 }
 export interface ControlLease { epoch: string; participant: string; viewer: string; user: string; mode: "manual" | "assist" }

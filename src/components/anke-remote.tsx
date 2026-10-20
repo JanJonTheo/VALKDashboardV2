@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnkeDiagnostics } from "@/components/anke-diagnostics";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { ASSISTS, remoteRequest, videoPoint, type ControlLease, type MediaAccess, type RemoteDevice,
   type RemoteStatus, type StartReview, type ViewerState } from "@/lib/remote-screen";
@@ -41,10 +42,10 @@ export function AnkeRemote() {
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{devices.map((d) => <article key={d.id} className="rounded border border-white/15 p-4 space-y-2">
       <h2 className="font-semibold">{d.name}</h2><p>{d.status.commander || "Commander unavailable"}</p>
-      <p className="text-sm opacity-70">{d.online ? "Online" : "Offline"} · {d.status.assist || "No assist"}</p>
+      <p className="text-sm opacity-70">{d.archived ? "Unpaired · archive" : d.online ? "Online" : "Offline"} · {d.status.assist || "No assist"}</p>
       <p className="text-sm">Control {d.status.control_enabled ? "enabled locally" : "disabled locally"}{d.operator ? ` · ${d.operator}` : ""}</p>
-      <button className={button} disabled={!d.online} onClick={() => setSelected(d.id)}>Open screen</button>
-      {d.owner && <button className={`${button} ml-2`} onClick={() => setSharing(d.id)}>Manage access</button>}
+      <button className={button} onClick={() => setSelected(d.id)}>Screen and diagnostics</button>
+      {d.owner && !d.archived && <button className={`${button} ml-2`} onClick={() => setSharing(d.id)}>Manage access</button>}
     </article>)}</div>
     {!devices.length && <p>No clients are available. Pair a client or ask its owner to share it with your account.</p>}
     {device && <RemoteViewer key={device.id} device={device} onClose={() => setSelected(null)} />}
@@ -315,6 +316,7 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
       <button className={button} disabled={busy || checks.some((v) => !v)} onClick={() => void command("confirm", { review_id: review.review_id, checks })}>Confirm and start</button>
       <button className={button} onClick={() => setReview(null)}>Cancel</button>
     </section>}
+    <AnkeDiagnostics deviceId={device.id} />
     {error && <p role="alert" className="text-red-300">{error}</p>}
   </section>;
 }
