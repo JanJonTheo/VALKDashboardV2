@@ -30,6 +30,25 @@ afterEach(() => {
 });
 
 describe("SignInOptions", () => {
+  it("returns to the mobile remote after credential login", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true }));
+    render(<SignInOptions tenants={[{ id: "valk-development", name: "VALK Development" }]}
+      defaultTenantId="valk-development" discordEnabled nextPath="/remote" />);
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "commander" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Login with Credentials" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/remote"));
+  });
+
+  it("preserves the mobile destination for Discord login", async () => {
+    social.mockResolvedValue({ error: null });
+    render(<SignInOptions tenants={[{ id: "valk-development", name: "VALK Development" }]}
+      defaultTenantId="valk-development" discordEnabled nextPath="/remote" />);
+    fireEvent.click(screen.getByRole("button", { name: "Login with Discord" }));
+    await waitFor(() => expect(social).toHaveBeenCalledWith({ provider: "discord",
+      callbackURL: new URL("/api/session/social-complete?tenantId=valk-development&next=/remote", window.location.origin).toString() }));
+  });
+
   it("uses one tenant selector and never asks the browser for an API key", async () => {
     const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {

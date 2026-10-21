@@ -23,8 +23,8 @@ test("remote screen lists devices without joining and produces a pairing code", 
   expect(joins).toBe(0);
   await page.getByRole("button", { name: "Pair an ANKe client" }).click();
   await expect(page.getByText("one-time-pairing-code")).toBeVisible();
-  await page.getByRole("button", { name: "Open screen" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "Media unavailable" })).toBeVisible();
+  await page.getByRole("button", { name: "Screen and diagnostics" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Media unavailable" }).last()).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop all assists / zero throttle" })).toBeDisabled();
   await page.getByRole("textbox", { name: "Find a user" }).fill("Friend");
   await expect(page.getByRole("option", { name: "Friend Commander" })).toBeAttached();
@@ -32,4 +32,14 @@ test("remote screen lists devices without joining and produces a pairing code", 
   await page.getByRole("combobox", { name: "Access rights" }).selectOption("control");
   await page.getByRole("button", { name: "Grant access" }).click();
   await page.getByRole("button", { name: "Close screen" }).click();
+  // The same navigation is available in the sidebar and the narrow-screen menu.
+  const mobileLink = page.getByRole("link", { name: "Mobile Remote", exact: true });
+  const navigationButton = page.getByRole("button", { name: "Open navigation" });
+  if (await navigationButton.isVisible()) {
+    await navigationButton.click();
+  }
+  await expect(mobileLink).toHaveAttribute("href", "/remote");
+  await mobileLink.click();
+  await expect(page).toHaveURL(/\/remote$/);
+  await expect(page.locator(".remote-app")).toBeVisible();
 });

@@ -10,8 +10,9 @@ import {
   resolveLoginTenantId,
 } from "@/lib/login-preference";
 
-export default async function SignInPage() {
-  if (await getDashboardSession()) redirect("/");
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const nextPath = (await searchParams).next === "/remote" ? "/remote" : "/";
+  if (await getDashboardSession()) redirect(nextPath);
   const tenants = (await getTenantConfigs()).map(({ id, name }) => ({
     id,
     name,
@@ -47,6 +48,7 @@ export default async function SignInPage() {
           previously linked Discord account.
         </p>
         <SignInOptions
+          nextPath={nextPath}
           tenants={tenants}
           defaultTenantId={defaultTenantId}
           discordEnabled={discordEnabled}

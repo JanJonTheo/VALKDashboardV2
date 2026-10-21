@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnkeDiagnostics } from "@/components/anke-diagnostics";
+import { RemoteTouchControls } from "@/components/remote-touch-controls";
+import Link from "next/link";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { ASSISTS, remoteRequest, videoPoint, type ControlLease, type MediaAccess, type RemoteDevice,
   type RemoteStatus, type StartReview, type ViewerState } from "@/lib/remote-screen";
@@ -9,7 +11,7 @@ import { ASSISTS, remoteRequest, videoPoint, type ControlLease, type MediaAccess
 const button = "rounded border border-white/20 px-3 py-2 text-sm disabled:opacity-40 hover:bg-white/10";
 const input = "rounded border border-white/20 bg-black/30 px-3 py-2";
 
-export function AnkeRemote() {
+export function AnkeRemote({ mobile = false }: { mobile?: boolean }) {
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [sharing, setSharing] = useState<string | null>(null);
@@ -32,24 +34,25 @@ export function AnkeRemote() {
   const device = devices.find((d) => d.id === selected);
   const sharedDevice = devices.find((d) => d.id === sharing && d.owner) ?? (device?.owner ? device : undefined);
   return <section className="space-y-5">
-    <div><p className="text-sm opacity-60">Operations</p><h1 className="text-2xl font-semibold">ANKe Remote</h1>
-      <p className="mt-2 opacity-70">Live Elite screens shared with you. Opening a screen starts transmission.</p></div>
-    <button className={button} onClick={() => void remoteRequest<{code: string}>("pairings", "POST", {}).then((x) => {
+    <div><p className="text-sm opacity-60">{mobile ? "Tablet & mobile control" : "Operations"}</p><h1 className="text-2xl font-semibold">ANKe Remote</h1>
+      <p className="mt-2 opacity-70">{mobile ? "Livebild, Panels und Assistenten – direkt per Touch." : "Live Elite screens shared with you. Opening a screen starts transmission."}</p>
+      {!mobile && <Link className="inline-block mt-3 underline" href="/remote">Open tablet / mobile remote</Link>}</div>
+    {!mobile && <button className={button} onClick={() => void remoteRequest<{code: string}>("pairings", "POST", {}).then((x) => {
       setPairing(x.code); setTimeout(() => setPairing(""), 600000);
-    }).catch((e) => setError(String(e)))}>Pair an ANKe client</button>
+    }).catch((e) => setError(String(e)))}>Pair an ANKe client</button>}
     {pairing && <div className="rounded border border-white/20 p-4"><p>Enter this one-time code in ANKe within 10 minutes:</p>
       <code className="break-all select-all">{pairing}</code></div>}
     {error && <p role="alert" className="text-red-300">{error}</p>}
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{devices.map((d) => <article key={d.id} className="rounded border border-white/15 p-4 space-y-2">
+    {(!mobile || !device) && <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{devices.map((d) => <article key={d.id} className="rounded border border-white/15 p-4 space-y-2">
       <h2 className="font-semibold">{d.name}</h2><p>{d.status.commander || "Commander unavailable"}</p>
       <p className="text-sm opacity-70">{d.archived ? "Unpaired · archive" : d.online ? "Online" : "Offline"} · {d.status.assist || "No assist"}</p>
       <p className="text-sm">Control {d.status.control_enabled ? "enabled locally" : "disabled locally"}{d.operator ? ` · ${d.operator}` : ""}</p>
-      <button className={button} onClick={() => setSelected(d.id)}>Screen and diagnostics</button>
-      {d.owner && !d.archived && <button className={`${button} ml-2`} onClick={() => setSharing(d.id)}>Manage access</button>}
-    </article>)}</div>
+      <button className={button} disabled={mobile && (!d.online || d.archived)} onClick={() => setSelected(d.id)}>{mobile ? "Verbinden" : "Screen and diagnostics"}</button>
+      {!mobile && d.owner && !d.archived && <button className={`${button} ml-2`} onClick={() => setSharing(d.id)}>Manage access</button>}
+    </article>)}</div>}
     {!devices.length && <p>No clients are available. Pair a client or ask its owner to share it with your account.</p>}
-    {device && <RemoteViewer key={device.id} device={device} onClose={() => setSelected(null)} />}
-    {sharedDevice && <Sharing key={`access-${sharedDevice.id}`} device={sharedDevice} refresh={refresh} />}
+    {device && <RemoteViewer key={device.id} device={device} mobile={mobile} onClose={() => setSelected(null)} />}
+    {!mobile && sharedDevice && <Sharing key={`access-${sharedDevice.id}`} device={sharedDevice} refresh={refresh} />}
   </section>;
 }
 
@@ -81,7 +84,8 @@ function Sharing({ device, refresh }: { device: RemoteDevice; refresh: () => Pro
   </section>;
 }
 
-function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () => void }) {
+export function RemoteViewer({ device, onClose, mobile = false }: { device: RemoteDevice; onClose: () => void; mobile?: boolean }) {
+  const container = useRef<HTMLElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const surface = useRef<HTMLDivElement>(null);
   const room = useRef<Room | null>(null);
@@ -89,6 +93,9 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
   const leaseRef = useRef<ControlLease | null>(null);
   const wantsControl = useRef(false);
   const controlRevision = useRef(0);
+  const commandRevision = useRef(0);
+  const inputFailed = useRef(false);
+  const reviewExpiresAt = useRef(0);
   const acquiring = useRef(false);
   const serverOffset = useRef(0);
   const lastDecodedAt = useRef(0);
@@ -106,11 +113,14 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
   const [connected, setConnected] = useState(false);
   const [fresh, setFresh] = useState(false);
   const [quality, setQuality] = useState("unknown");
+  const [connectionError, setConnectionError] = useState("");
   const [error, setError] = useState("");
   const [mode, setMode] = useState(ASSISTS[0]);
   const [review, setReview] = useState<StartReview | null>(null);
   const [checks, setChecks] = useState<boolean[]>([]);
   const [busy, setBusy] = useState(false);
+  const [reviewSeconds, setReviewSeconds] = useState(0);
+  const [notice, setNotice] = useState("");
   const base = `devices/${device.id}`;
 
   const send = useCallback((data: Record<string, unknown>) => {
@@ -119,15 +129,21 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
     const packet = { ...data, epoch: current.epoch, seq: ++seq.current, sent_at: Date.now()/1000 + serverOffset.current };
     void room.current.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(packet)), {
       reliable: data.type !== "move" && data.type !== "relative", topic: "anke.input.v1", destinationIdentities: [`device-${device.id}`],
-    }).catch(() => { wantsControl.current = false; });
+    }).catch(() => { inputFailed.current = true; wantsControl.current = false; });
   }, [device.id]);
+
+  const touchKey = useCallback((code: string, down: boolean) => {
+    if (down) pressed.current.add(code); else pressed.current.delete(code);
+    send({ type: "key", code, down });
+  }, [send]);
 
   const release = useCallback(() => {
     controlRevision.current++;
+    commandRevision.current++;
     send({ type: "release" });
     wantsControl.current = false; leaseRef.current = null; movement.current = null;
     pressed.current.clear(); buttons.current.clear();
-    if (active.current) { setLease(null); setReview(null); }
+    if (active.current) { setLease(null); setReview(null); setBusy(false); }
     if (document.pointerLockElement) document.exitPointerLock();
     if (viewer.current) void remoteRequest(`${base}/viewers/${viewer.current}/control`, "DELETE").catch(() => {});
   }, [base, send]);
@@ -149,7 +165,7 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
           track.attach(video.current); setConnected(true);
         }
       });
-      next.on(RoomEvent.TrackUnsubscribed, (track) => { track.detach(); setConnected(false); });
+      next.on(RoomEvent.TrackUnsubscribed, (track) => { track.detach(); setConnected(false); release(); });
       next.on(RoomEvent.Disconnected, () => { if (!stopped) { mediaRoom = ""; setConnected(false); release(); } });
       next.on(RoomEvent.ConnectionQualityChanged, (value, participant) => {
         if (participant.identity === `device-${device.id}` || participant === next.localParticipant) setQuality(String(value));
@@ -174,7 +190,12 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
         if (stopped) return;
         serverOffset.current = state.server_time - Date.now()/1000;
         if (revision === controlRevision.current && !acquiring.current) {
+          const previous = leaseRef.current;
           leaseRef.current = state.lease?.viewer === viewer.current ? state.lease : null;
+          if (previous && previous.epoch !== leaseRef.current?.epoch) {
+            commandRevision.current++; pressed.current.clear(); buttons.current.clear();
+            setReview(null); setBusy(false);
+          }
           if (!leaseRef.current) wantsControl.current = false;
           setLease(leaseRef.current);
         }
@@ -183,11 +204,11 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
         capturedAt.current = state.status.frame_at ?? 0;
         setAge(state.status.frame_at ? Math.max(0, state.server_time - state.status.frame_at).toFixed(1) : "—");
         await connect(state.media);
-        if (!stopped) setError("");
+        if (!stopped) setConnectionError("");
         if (!stopped) timer = setTimeout(pulse, 800);
       } catch (e) {
         if (!stopped) {
-          setError(String(e)); release(); setConnected(false); await room.current?.disconnect();
+          setConnectionError(String(e)); release(); setConnected(false); await room.current?.disconnect();
           if (viewer.current) void remoteRequest(`${base}/viewers/${viewer.current}`, "DELETE").catch(() => {});
           viewer.current = ""; mediaRoom = "";
           if (!stopped) timer = setTimeout(pulse, 2000);
@@ -197,12 +218,17 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
     void pulse();
     const blur = () => release();
     const visibility = () => { if (document.hidden) release(); };
+    const outside = (event: PointerEvent) => {
+      if (leaseRef.current?.mode === "manual" && event.target instanceof Node && !container.current?.contains(event.target)) release();
+    };
     let wasLocked = false;
     const pointerLock = () => {
       if (wasLocked && !document.pointerLockElement) release();
       wasLocked = !!document.pointerLockElement;
     };
     window.addEventListener("blur", blur);
+    window.addEventListener("pagehide", blur);
+    document.addEventListener("pointerdown", outside);
     document.addEventListener("visibilitychange", visibility);
     document.addEventListener("pointerlockchange", pointerLock);
     const inputState = setInterval(() => {
@@ -215,21 +241,27 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
     let frameCallback = 0;
     const decoded = () => {
       lastDecodedAt.current = Date.now();
-      frameCallback = element?.requestVideoFrameCallback(decoded) ?? 0;
+      frameCallback = element?.requestVideoFrameCallback?.(decoded) ?? 0;
     };
-    frameCallback = element?.requestVideoFrameCallback(decoded) ?? 0;
+    frameCallback = element?.requestVideoFrameCallback?.(decoded) ?? 0;
+    const fallbackFrame = () => { if (element && element.readyState >= 2) lastDecodedAt.current = Date.now(); };
+    if (element && !element.requestVideoFrameCallback) element.addEventListener("timeupdate", fallbackFrame);
     const freshness = setInterval(() => {
       const now = Date.now();
       const current = now - lastDecodedAt.current < 2000 && now - lastStatusAt.current < 3000;
       setFresh(current);
       setAge(capturedAt.current ? Math.max(0, now/1000 + serverOffset.current - capturedAt.current).toFixed(1) : "—");
-      if (!current && leaseRef.current?.mode === "manual") release();
+      setReviewSeconds(Math.max(0, Math.ceil((reviewExpiresAt.current - now) / 1000)));
+      if ((!current || inputFailed.current) && leaseRef.current?.mode === "manual") release();
     }, 250);
     return () => {
       stopped = true; active.current = false; abort.abort(); clearTimeout(timer); clearInterval(movements);
       clearInterval(inputState); document.removeEventListener("pointerlockchange", pointerLock);
-      clearInterval(freshness); element?.cancelVideoFrameCallback(frameCallback);
+      clearInterval(freshness); element?.cancelVideoFrameCallback?.(frameCallback);
+      element?.removeEventListener("timeupdate", fallbackFrame);
       window.removeEventListener("blur", blur); document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("pagehide", blur);
+      document.removeEventListener("pointerdown", outside);
       release();
       if (viewer.current) void remoteRequest(`${base}/viewers/${viewer.current}`, "DELETE").catch(() => {});
       viewer.current = ""; void room.current?.disconnect(); room.current = null;
@@ -239,6 +271,14 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
   const acquire = async (controlMode: "assist" | "manual") => {
     if (acquiring.current || !viewer.current) return;
     acquiring.current = true;
+    commandRevision.current++;
+    setBusy(true);
+    setNotice("");
+    if (leaseRef.current?.mode === "manual") {
+      send({ type: "release" }); pressed.current.clear(); buttons.current.clear();
+    }
+    leaseRef.current = null; wantsControl.current = false; movement.current = null;
+    setLease(null); setReview(null); inputFailed.current = false;
     const revision = ++controlRevision.current;
     try {
       const result = await remoteRequest<{lease: ControlLease}>(`${base}/viewers/${viewer.current}/control`, "POST", { mode: controlMode });
@@ -247,41 +287,69 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
       wantsControl.current = true; leaseRef.current = result.lease; setLease(result.lease); setReview(null); setError("");
       surface.current?.focus();
     } catch (e) { setError(String(e)); }
-    finally { acquiring.current = false; }
+    finally { acquiring.current = false; if (active.current) setBusy(false); }
   };
   const command = async (action: string, extra: Record<string, unknown> = {}) => {
-    setBusy(true); setError("");
+    const revision = ++commandRevision.current;
+    const current = () => active.current && revision === commandRevision.current;
+    setBusy(true); setError(""); setNotice("");
     try {
       const sent = await remoteRequest<{command_id: string}>(`${base}/commands`, "POST", { action, viewer_id: viewer.current, ...extra });
       const deadline = Date.now() + 31000;
-      while (active.current && Date.now() < deadline) {
+      while (current() && Date.now() < deadline) {
         const value = await remoteRequest<{state: string; result: StartReview & { error?: string }}>(`${base}/commands/${sent.command_id}`);
+        if (!current()) return;
         if (value.state !== "pending") {
           if (value.state !== "completed") throw new Error(value.result?.error ?? "Command expired");
-          if (action === "prepare") { setReview(value.result); setChecks(value.result.checks.map(() => false)); }
-          else { setReview(null); if (action === "confirm") release(); }
+          if (action === "prepare") {
+            reviewExpiresAt.current = Date.now() + Math.min(30, value.result.expires_in ?? 30) * 1000;
+            setReviewSeconds(Math.max(0, Math.ceil((reviewExpiresAt.current - Date.now()) / 1000)));
+            setReview(value.result); setChecks(value.result.checks.map(() => false));
+          }
+          else {
+            setReview(null);
+            if (action === "confirm") release();
+            setNotice(action === "confirm" ? "ANKe confirmed the assist start." : "ANKe confirmed stop / zero throttle.");
+          }
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 400));
       }
+      if (!current()) return;
       throw new Error("Command timed out. Its result is not confirmed.");
-    } catch (e) { if (active.current) setError(String(e)); }
-    finally { if (active.current) setBusy(false); }
+    } catch (e) { if (current()) setError(String(e)); }
+    finally { if (current()) setBusy(false); }
   };
   const manual = lease?.mode === "manual" && status.manual_ready && connected && fresh && status.capture === "live";
-  return <section className="rounded border border-white/20 p-4 space-y-3">
+  const assists = <div className={mobile ? "remote-assists" : "space-y-3"}>
+    {mobile && <><p className="remote-hint">Startet mit der lokalen ANKe-Konfiguration. Vor dem Start die Übersicht prüfen und alle erforderlichen Punkte bestätigen.</p>
+      <button className={button} disabled={!device.can_control || !connected || !status.control_enabled || busy || lease?.mode === "assist"}
+        onClick={() => void acquire("assist")}>Assistentensteuerung übernehmen</button></>}
+    {lease?.mode === "assist" && <div className="flex flex-wrap gap-2"><select className={input} aria-label="Assist" disabled={busy} value={mode} onChange={(e) => { setMode(e.target.value); setReview(null); }}>{ASSISTS.map((a) => <option key={a}>{a}</option>)}</select>
+      <button className={button} disabled={busy} onClick={() => void command("prepare", { assist: mode })}>Review start</button></div>}
+    {review && <section className="space-y-3 rounded border border-amber-400/40 p-4"><h3 className="font-semibold">Confirm {review.assist}</h3>
+      <p className="text-sm">{reviewSeconds > 0 ? `Uses the current local configuration. Review expires in ${reviewSeconds}s.` : "Review expired. Request a new start review."}</p>
+      {review.sections.map(([name, tables]) => <div key={name}><h4 className="font-semibold">{name}</h4>{tables.map(([headers, rows], index) => <div className="overflow-auto" key={index}><table className="text-sm"><thead><tr>{headers.map((h) => <th className="p-2 text-left" key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{row.map((v, j) => <td className="p-2" key={j}>{v}</td>)}</tr>)}</tbody></table></div>)}</div>)}
+      {review.checks.map((text, i) => <label className="block" key={text}><input type="checkbox" checked={checks[i] ?? false} onChange={(e) => setChecks((old) => old.map((v, n) => n === i ? e.target.checked : v))} /> {text}</label>)}
+      <button className={button} disabled={busy || reviewSeconds <= 0 || checks.some((v) => !v)} onClick={() => void command("confirm", { review_id: review.review_id, checks })}>Confirm and start</button>
+      <button className={button} disabled={busy} onClick={() => setReview(null)}>Cancel</button>
+    </section>}
+  </div>;
+  return <section ref={container} onBlur={(e) => {
+    if (manual && e.relatedTarget && !container.current?.contains(e.relatedTarget)) release();
+  }} className={`remote-viewer rounded border border-white/20 p-3 sm:p-4 space-y-3 ${mobile ? "remote-mobile-viewer" : ""}`}>
     <div className="flex flex-wrap justify-between gap-3"><h2 className="font-semibold">{device.name} · Live screen</h2>
       <button className={button} onClick={onClose}>Close screen</button></div>
-    <div ref={surface} tabIndex={0} aria-label="Elite remote keyboard and mouse control" className="relative bg-black outline-offset-4"
-      onBlur={() => { if (manual) release(); }}
+    <div className={mobile ? "remote-workspace" : ""}>
+    <div ref={surface} tabIndex={mobile ? -1 : 0} aria-label="Elite remote keyboard and mouse control" className="remote-video relative bg-black outline-offset-4"
       onKeyDown={(e) => { if (manual) { e.preventDefault(); if (!e.repeat) { pressed.current.add(e.code); send({ type: "key", code: e.code, down: true }); } } }}
       onKeyUp={(e) => { if (manual) { e.preventDefault(); pressed.current.delete(e.code); send({ type: "key", code: e.code, down: false }); } }}
       onContextMenu={(e) => { if (manual) e.preventDefault(); }}
-      onMouseDown={(e) => { if (manual) { e.preventDefault(); surface.current?.focus(); buttons.current.add(e.button); send({ type: "button", button: e.button, down: true }); } }}
-      onMouseUp={(e) => { if (manual) { buttons.current.delete(e.button); send({ type: "button", button: e.button, down: false }); } }}
-      onMouseLeave={() => { if (manual && !document.pointerLockElement) release(); }}
+      onMouseDown={(e) => { if (manual && !mobile) { e.preventDefault(); surface.current?.focus(); buttons.current.add(e.button); send({ type: "button", button: e.button, down: true }); } }}
+      onMouseUp={(e) => { if (manual && !mobile) { buttons.current.delete(e.button); send({ type: "button", button: e.button, down: false }); } }}
+      onMouseLeave={() => { if (manual && !mobile && !document.pointerLockElement && buttons.current.size) release(); }}
       onMouseMove={(e) => {
-        if (!manual || !video.current) return;
+        if (!manual || mobile || !video.current) return;
         if (document.pointerLockElement) {
           const last = movement.current;
           movement.current = { type: "relative", x: Math.max(-1000, Math.min(1000, Number(last?.x ?? 0) + e.movementX)), y: Math.max(-1000, Math.min(1000, Number(last?.y ?? 0) + e.movementY)) };
@@ -289,34 +357,37 @@ function RemoteViewer({ device, onClose }: { device: RemoteDevice; onClose: () =
           const point = videoPoint(video.current.getBoundingClientRect(), video.current.videoWidth, video.current.videoHeight, e.clientX, e.clientY);
           if (point) movement.current = { type: "move", ...point };
         }
-      }} onWheel={(e) => { if (manual) send({ type: "wheel", delta: Math.sign(-e.deltaY) * 120 }); }}>
+      }} onWheel={(e) => { if (manual && !mobile) send({ type: "wheel", delta: Math.sign(-e.deltaY) * 120 }); }}>
       <video ref={video} autoPlay playsInline muted className="w-full max-h-[70vh] object-contain" />
       {(!connected || !fresh || status.capture !== "live") && <div className="absolute inset-0 grid place-items-center bg-black"><p>{status.capture === "live" ? "Waiting for current frames" : status.capture || "Connecting …"} · no current live image</p></div>}
     </div>
+    {mobile && <RemoteTouchControls enabled={!!manual} bindings={status.input_bindings} emit={touchKey}>{assists}</RemoteTouchControls>}
+    </div>
     <p className="text-sm opacity-70">{connected ? "Connected" : "Waiting"} · Quality: {quality} · Image age: {age}s · {lease ? `Operator ${lease.user}: ${lease.mode}${lease.mode === "manual" && !manual ? " (waiting for ANKe handoff)" : ""}` : "Viewing only"}</p>
+    <p className="text-sm opacity-70">{status.commander || device.status.commander || device.name} · Assist: {status.assist || "—"}</p>
+    {notice && <p role="status" className="text-sm text-emerald-300">{notice}</p>}
     <div className="flex flex-wrap gap-2">
       <select className={input} aria-label="Video quality" defaultValue="standard" onChange={(e) => { profileRef.current = e.target.value; }}><option value="standard">720p / 15 FPS</option><option value="detail">1080p / 30 FPS</option></select>
-      <button className={button} onClick={() => void surface.current?.requestFullscreen().catch((e) => setError(String(e)))}>Fullscreen</button>
+      <button className={button} onClick={() => {
+        if (document.fullscreenElement) void document.exitFullscreen().catch((e) => setError(String(e)));
+        else if (container.current?.requestFullscreen) void container.current.requestFullscreen().catch((e) => setError(String(e)));
+        else setError("Fullscreen is unavailable in this browser. Use landscape orientation for a larger view.");
+      }}>Fullscreen</button>
+    </div>
+    <div className={`flex flex-wrap gap-2 ${mobile ? "remote-command-bar" : ""}`}>
       {device.can_control && <>
-        <button className={button} disabled={!connected || !status.control_enabled || busy} onClick={() => void acquire("assist")}>Control assists</button>
-        <button className={`${button} hidden md:block`} disabled={!connected || !fresh || !status.control_enabled || busy} onClick={() => void acquire("manual")}>Take manual control</button>
-        <button className={button} disabled={!lease} onClick={release}>Release control</button>
-        {manual && <button className={button} onMouseDown={(e) => e.preventDefault()} onClick={() => {
+        {!mobile && <button className={button} disabled={!connected || !status.control_enabled || busy} onClick={() => void acquire("assist")}>Control assists</button>}
+        <button className={button} aria-label={mobile ? "Manuelle Steuerung übernehmen" : undefined} disabled={!connected || !fresh || !status.control_enabled || busy || lease?.mode === "manual"} onClick={() => void acquire("manual")}>{mobile ? "Manuelle Steuerung" : "Take manual control"}</button>
+        <button className={button} aria-label={mobile ? "Release control" : undefined} disabled={!lease} onClick={release}>{mobile ? "Freigeben" : "Release control"}</button>
+        {manual && !mobile && <button className={button} onMouseDown={(e) => e.preventDefault()} onClick={() => {
           surface.current?.focus(); void surface.current?.requestPointerLock();
         }}>Relative mouse · Esc to exit</button>}
-        <button className={`${button} border-red-500 text-red-300`} disabled={!status.control_enabled} onClick={() => { release(); void command("stop"); }}>Stop all assists / zero throttle</button>
+        <button className={`${button} border-red-500 text-red-300`} aria-label={mobile ? "Stop all assists / zero throttle" : undefined} disabled={!status.control_enabled} onClick={() => { release(); void command("stop"); }}>{mobile ? "STOP / Nullschub" : "Stop all assists / zero throttle"}</button>
       </>}
     </div>
-    {lease?.mode === "assist" && <div className="flex flex-wrap gap-2"><select className={input} aria-label="Assist" value={mode} onChange={(e) => setMode(e.target.value)}>{ASSISTS.map((a) => <option key={a}>{a}</option>)}</select>
-      <button className={button} disabled={busy} onClick={() => void command("prepare", { assist: mode })}>Review start</button></div>}
-    {review && <section className="space-y-3 rounded border border-amber-400/40 p-4"><h3 className="font-semibold">Confirm {review.assist}</h3>
-      <p className="text-sm">Uses the current local configuration. Review expires after 30 seconds.</p>
-      {review.sections.map(([name, tables]) => <div key={name}><h4 className="font-semibold">{name}</h4>{tables.map(([headers, rows], index) => <div className="overflow-auto" key={index}><table className="text-sm"><thead><tr>{headers.map((h) => <th className="p-2 text-left" key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{row.map((v, j) => <td className="p-2" key={j}>{v}</td>)}</tr>)}</tbody></table></div>)}</div>)}
-      {review.checks.map((text, i) => <label className="block" key={text}><input type="checkbox" checked={checks[i] ?? false} onChange={(e) => setChecks((old) => old.map((v, n) => n === i ? e.target.checked : v))} /> {text}</label>)}
-      <button className={button} disabled={busy || checks.some((v) => !v)} onClick={() => void command("confirm", { review_id: review.review_id, checks })}>Confirm and start</button>
-      <button className={button} onClick={() => setReview(null)}>Cancel</button>
-    </section>}
-    <AnkeDiagnostics deviceId={device.id} />
+    {!mobile && assists}
+    {!mobile && <AnkeDiagnostics deviceId={device.id} />}
+    {connectionError && <p role="alert" className="text-red-300">{connectionError}</p>}
     {error && <p role="alert" className="text-red-300">{error}</p>}
   </section>;
 }

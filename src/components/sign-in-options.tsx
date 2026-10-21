@@ -29,10 +29,12 @@ export function SignInOptions({
   tenants,
   defaultTenantId,
   discordEnabled,
+  nextPath = "/",
 }: {
   tenants: { id: string; name: string }[];
   defaultTenantId: string;
   discordEnabled: boolean;
+  nextPath?: "/" | "/remote";
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<string>();
@@ -72,7 +74,7 @@ export function SignInOptions({
       );
       return;
     }
-    router.replace("/");
+    router.replace(nextPath);
     router.refresh();
   });
 
@@ -89,7 +91,7 @@ export function SignInOptions({
     setSocialPending(true);
     try {
       const callbackURL = new URL(
-        `/api/session/social-complete?tenantId=${encodeURIComponent(tenantId)}`,
+        `/api/session/social-complete?tenantId=${encodeURIComponent(tenantId)}${nextPath === "/remote" ? "&next=/remote" : ""}`,
         window.location.origin,
       ).toString();
       const result = await authClient.signIn.social({

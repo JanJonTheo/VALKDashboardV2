@@ -19,6 +19,7 @@ import {
   Shield,
   ShieldCheck,
   Swords,
+  TabletSmartphone,
   Target,
   Users,
   ListChecks,
@@ -64,6 +65,7 @@ const groups = [
       { href: "/operations/objectives", label: "Objectives", icon: Target },
       { href: "/operations/colonisation", label: "Colonisation", icon: Orbit },
       { href: "/operations/anke-remote", label: "ANKe Remote", icon: Activity },
+      { href: "/remote", label: "Mobile Remote", icon: TabletSmartphone },
     ],
   },
   {

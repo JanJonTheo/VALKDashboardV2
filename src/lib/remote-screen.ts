@@ -1,5 +1,6 @@
 export interface MediaAccess { url: string; token: string; room: string; identity: string }
 export interface RemoteStatus {
+  input_bindings?: import("./remote-touch").TouchBindings;
   commander?: string; fid?: string; assist?: string; capture?: string; frame_at?: number;
   manual_ready?: boolean; enabled?: boolean; control_enabled?: boolean;
 }

@@ -2,6 +2,19 @@
 
 Changes to VALK Dashboard, listed in reverse chronological order. Dates and times use Europe/Berlin.
 
+## 21.10.2026 - Tablet and mobile ANKe Remote
+
+- Added Operations → Mobile Remote as a direct entry to the tablet controls in the desktop sidebar and mobile navigation. The existing ANKe Remote page retains its pairing and diagnostics tools.
+- Deployed dashboard release `20261021-mobile-navigation` and passed 30 public HTTPS checks, including the authenticated navigation link and synthetic assist review/start/stop. Both paired clients, ANKe and Shadow-PC, now report all 28 configured touch actions. All 242 dashboard tests and 15 Chromium/WebKit browser checks passed, alongside lint, TypeScript and the Linux production build.
+
+- Deployed the mobile interface and compatible API to `https://valk-elite.de/remote`, with verified rollback snapshots. Restarted the local paired ANKe source installation and confirmed all 28 configured touch actions. Linux API tests, the production build and 29 public HTTPS checks passed; real iPad/game acceptance remains with the user.
+
+- Added a dedicated `/remote` interface without the dashboard sidebar, with large touch controls and layouts for portrait and landscape use. The existing remote page links to it, and login returns to the mobile interface.
+- Added Elite UI panel focus, menu navigation, selection, back and previous/next tabs, plus flight axes, throttle presets, targeting and maps. Touch buttons use the paired ANKe client's actual keyboard bindings; missing bindings stay disabled.
+- Kept the existing assist start workflow with local configuration reviews and required confirmations. Expired or superseded reviews cannot be submitted, and confirmed start/stop results remain visible alongside the running assist.
+- Added input release on touch cancellation, app switching, stale video and data-channel failure. The compact control bar keeps manual takeover, release and stop/zero throttle reachable. Fullscreen includes the touch controls.
+- Added automated checks for touch input, manual handoff, permission and connection loss, start confirmation, mobile login, and responsive browser layouts. Client and Flask API companion changes are required for configured touch bindings; see `docs/MOBILE-REMOTE.md` for rollout and validation limits.
+
 
 ## 20.10.2026 - v0.2.0 - ANKe diagnostics beside the live screen
 

@@ -42,7 +42,8 @@ export async function GET(request: Request) {
     sessionId: socialSession.session.id,
     mustChangePassword: user.mustChangePassword === true,
   });
-  const response = NextResponse.redirect(publicAppUrl("/", request.url));
+  const nextPath = new URL(request.url).searchParams.get("next") === "/remote" ? "/remote" : "/";
+  const response = NextResponse.redirect(publicAppUrl(nextPath, request.url));
   response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
   return response;
 }
