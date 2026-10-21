@@ -95,6 +95,9 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
   const controlRevision = useRef(0);
   const commandRevision = useRef(0);
   const inputFailed = useRef(false);
+  const pausedAt = useRef(0);
+  const mediaAvailable = useRef(false);
+  const captureLive = useRef(false);
   const reviewExpiresAt = useRef(0);
   const acquiring = useRef(false);
   const serverOffset = useRef(0);
@@ -112,6 +115,7 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
   const [lease, setLease] = useState<ControlLease | null>(null);
   const [connected, setConnected] = useState(false);
   const [fresh, setFresh] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [quality, setQuality] = useState("unknown");
   const [connectionError, setConnectionError] = useState("");
   const [error, setError] = useState("");
@@ -127,12 +131,18 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
     const current = leaseRef.current;
     if (!current || current.mode !== "manual" || !room.current) return;
     const packet = { ...data, epoch: current.epoch, seq: ++seq.current, sent_at: Date.now()/1000 + serverOffset.current };
-    void room.current.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(packet)), {
+    const target = room.current;
+    void target.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(packet)), {
       reliable: data.type !== "move" && data.type !== "relative", topic: "anke.input.v1", destinationIdentities: [`device-${device.id}`],
-    }).catch(() => { inputFailed.current = true; wantsControl.current = false; });
+    }).catch(() => {
+      if (room.current === target && leaseRef.current?.epoch === current.epoch) {
+        inputFailed.current = true; wantsControl.current = false;
+      }
+    });
   }, [device.id]);
 
   const touchKey = useCallback((code: string, down: boolean) => {
+    if (down && pausedAt.current) return;
     if (down) pressed.current.add(code); else pressed.current.delete(code);
     send({ type: "key", code, down });
   }, [send]);
@@ -143,10 +153,24 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
     send({ type: "release" });
     wantsControl.current = false; leaseRef.current = null; movement.current = null;
     pressed.current.clear(); buttons.current.clear();
-    if (active.current) { setLease(null); setReview(null); setBusy(false); }
+    pausedAt.current = 0;
+    if (active.current) { setLease(null); setReview(null); setBusy(false); setPaused(false); }
     if (document.pointerLockElement) document.exitPointerLock();
     if (viewer.current) void remoteRequest(`${base}/viewers/${viewer.current}/control`, "DELETE").catch(() => {});
   }, [base, send]);
+
+  // A video resubscription is not a withdrawal of the user's control request.
+  // Keep the same server lease, but neutralize input until fresh video returns.
+  const pauseManual = useCallback(() => {
+    if (leaseRef.current?.mode !== "manual") return;
+    pressed.current.clear(); buttons.current.clear(); movement.current = null;
+    if (!pausedAt.current) {
+      pausedAt.current = Date.now();
+      lastDecodedAt.current = 0;
+      send({ type: "state", keys: [], buttons: [] });
+    }
+    setFresh(false); setPaused(true);
+  }, [send]);
 
   useEffect(() => {
     active.current = true;
@@ -160,13 +184,31 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
       mediaRoom = media.room;
       const next = new Room({ adaptiveStream: true });
       room.current = next;
+      let subscribedVideo: Track | null = null;
+      const currentRoom = () => !stopped && room.current === next;
       next.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-        if (track.kind === Track.Kind.Video && publication.source === Track.Source.ScreenShare && participant.identity === `device-${device.id}` && video.current) {
+        if (currentRoom() && track.kind === Track.Kind.Video && publication.source === Track.Source.ScreenShare && participant.identity === `device-${device.id}` && video.current) {
+          subscribedVideo = track; mediaAvailable.current = true;
           track.attach(video.current); setConnected(true);
         }
       });
-      next.on(RoomEvent.TrackUnsubscribed, (track) => { track.detach(); setConnected(false); release(); });
-      next.on(RoomEvent.Disconnected, () => { if (!stopped) { mediaRoom = ""; setConnected(false); release(); } });
+      next.on(RoomEvent.TrackUnsubscribed, (track) => {
+        track.detach();
+        if (currentRoom() && track === subscribedVideo) {
+          subscribedVideo = null; mediaAvailable.current = false;
+          setConnected(false); pauseManual();
+        }
+      });
+      next.on(RoomEvent.Reconnecting, () => {
+        if (currentRoom()) { mediaAvailable.current = false; setConnected(false); pauseManual(); }
+      });
+      next.on(RoomEvent.Reconnected, () => {
+        if (currentRoom()) {
+          mediaAvailable.current = !!subscribedVideo;
+          setConnected(!!subscribedVideo);
+        }
+      });
+      next.on(RoomEvent.Disconnected, () => { if (currentRoom()) { mediaRoom = ""; mediaAvailable.current = false; setConnected(false); release(); } });
       next.on(RoomEvent.ConnectionQualityChanged, (value, participant) => {
         if (participant.identity === `device-${device.id}` || participant === next.localParticipant) setQuality(String(value));
       });
@@ -200,6 +242,7 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
           setLease(leaseRef.current);
         }
         setStatus(state.status);
+        captureLive.current = state.status.capture === "live";
         lastStatusAt.current = Date.now();
         capturedAt.current = state.status.frame_at ?? 0;
         setAge(state.status.frame_at ? Math.max(0, state.server_time - state.status.frame_at).toFixed(1) : "—");
@@ -248,11 +291,15 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
     if (element && !element.requestVideoFrameCallback) element.addEventListener("timeupdate", fallbackFrame);
     const freshness = setInterval(() => {
       const now = Date.now();
-      const current = now - lastDecodedAt.current < 2000 && now - lastStatusAt.current < 3000;
+      const current = mediaAvailable.current && captureLive.current && now - lastDecodedAt.current < 2000 && now - lastStatusAt.current < 3000;
       setFresh(current);
       setAge(capturedAt.current ? Math.max(0, now/1000 + serverOffset.current - capturedAt.current).toFixed(1) : "—");
       setReviewSeconds(Math.max(0, Math.ceil((reviewExpiresAt.current - now) / 1000)));
-      if ((!current || inputFailed.current) && leaseRef.current?.mode === "manual") release();
+      if (leaseRef.current?.mode === "manual") {
+        if (inputFailed.current || (pausedAt.current && now - pausedAt.current >= 8000)) release();
+        else if (!current) pauseManual();
+        else if (pausedAt.current) { pausedAt.current = 0; setPaused(false); }
+      }
     }, 250);
     return () => {
       stopped = true; active.current = false; abort.abort(); clearTimeout(timer); clearInterval(movements);
@@ -266,7 +313,7 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
       if (viewer.current) void remoteRequest(`${base}/viewers/${viewer.current}`, "DELETE").catch(() => {});
       viewer.current = ""; void room.current?.disconnect(); room.current = null;
     };
-  }, [base, device.id, release, send]);
+  }, [base, device.id, pauseManual, release, send]);
 
   const acquire = async (controlMode: "assist" | "manual") => {
     if (acquiring.current || !viewer.current) return;
@@ -278,7 +325,7 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
       send({ type: "release" }); pressed.current.clear(); buttons.current.clear();
     }
     leaseRef.current = null; wantsControl.current = false; movement.current = null;
-    setLease(null); setReview(null); inputFailed.current = false;
+    setLease(null); setReview(null); inputFailed.current = false; pausedAt.current = 0; setPaused(false);
     const revision = ++controlRevision.current;
     try {
       const result = await remoteRequest<{lease: ControlLease}>(`${base}/viewers/${viewer.current}/control`, "POST", { mode: controlMode });
@@ -364,6 +411,7 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
     {mobile && <RemoteTouchControls enabled={!!manual} bindings={status.input_bindings} emit={touchKey}>{assists}</RemoteTouchControls>}
     </div>
     <p className="text-sm opacity-70">{connected ? "Connected" : "Waiting"} · Quality: {quality} · Image age: {age}s · {lease ? `Operator ${lease.user}: ${lease.mode}${lease.mode === "manual" && !manual ? " (waiting for ANKe handoff)" : ""}` : "Viewing only"}</p>
+    {paused && lease?.mode === "manual" && <p role="status" className="text-sm text-amber-300">Steuerung pausiert – warte auf ein aktuelles Livebild. Die bestehende Freigabe wird kurzzeitig beibehalten.</p>}
     <p className="text-sm opacity-70">{status.commander || device.status.commander || device.name} · Assist: {status.assist || "—"}</p>
     {notice && <p role="status" className="text-sm text-emerald-300">{notice}</p>}
     <div className="flex flex-wrap gap-2">

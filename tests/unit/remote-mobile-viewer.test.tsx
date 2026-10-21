@@ -16,6 +16,8 @@ const mock = vi.hoisted(() => ({
   video: true,
   ready: true,
   failStatus: false,
+  controlEpoch: 0,
+  track: { kind: "video", attach: vi.fn(), detach: vi.fn() },
   handlers: {} as Record<string, (...args: unknown[]) => void>,
 }));
 vi.mock("@/lib/remote-screen", async (original) => ({
@@ -28,6 +30,8 @@ vi.mock("livekit-client", () => ({
     TrackSubscribed: "track",
     TrackUnsubscribed: "untrack",
     Disconnected: "disconnected",
+    Reconnecting: "reconnecting",
+    Reconnected: "reconnected",
     ConnectionQualityChanged: "quality",
   },
   Room: class {
@@ -39,7 +43,7 @@ vi.mock("livekit-client", () => ({
     }
     async connect() {
       this.handlers.track?.(
-        { kind: "video", attach: vi.fn() },
+        mock.track,
         { source: "screen" },
         { identity: `device-${"a".repeat(32)}` },
       );
@@ -63,7 +67,9 @@ beforeEach(() => {
   mock.video = true;
   mock.ready = true;
   mock.failStatus = false;
+  mock.controlEpoch = 0;
   mock.handlers = {};
+  mock.track = { kind: "video", attach: vi.fn(), detach: vi.fn() };
   mock.publish.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(
     HTMLVideoElement.prototype,
@@ -89,7 +95,7 @@ beforeEach(() => {
     if (path.endsWith("/control") && method === "POST") {
       mock.lease = {
         mode: body.mode,
-        epoch: "epoch",
+        epoch: `epoch-${++mock.controlEpoch}`,
         viewer: "viewer",
         participant: "p",
         user: "owner",
@@ -160,7 +166,142 @@ it("takes manual control, sends configured panel keys, keeps the lease when tapp
   mock.video = false;
   await tick(3000);
   expect(screen.getByRole("button", { name: "Systeme" })).toBeDisabled();
+  expect(mock.lease?.mode).toBe("manual");
+  await tick(8000);
   expect(mock.lease).toBeNull();
+});
+
+it.each(["untrack", "reconnecting"])(
+  "resumes the same manual lease after a short %s without replaying held keys",
+  async (reason) => {
+    render(<RemoteViewer device={device} onClose={vi.fn()} mobile />);
+    await tick();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Manuelle Steuerung übernehmen" }),
+    );
+    await tick();
+    const surface = screen.getByLabelText(
+      "Elite remote keyboard and mouse control",
+    );
+    fireEvent.keyDown(surface, { code: "ArrowUp" });
+    const originalLease = mock.lease;
+    mock.publish.mockClear();
+    act(() => {
+      if (reason === "untrack") mock.handlers.untrack(mock.track);
+      else mock.handlers.reconnecting();
+    });
+    expect(screen.getByRole("button", { name: "Systeme" })).toBeDisabled();
+    await tick(1200);
+    expect(mock.lease).toBe(originalLease);
+    expect(screen.getByRole("status")).toHaveTextContent("Steuerung pausiert");
+    const neutral = mock.publish.mock.calls.map(([data]) =>
+      JSON.parse(new TextDecoder().decode(data)),
+    );
+    expect(neutral).toContainEqual(
+      expect.objectContaining({ type: "state", keys: [], buttons: [] }),
+    );
+    expect(
+      neutral.some(
+        (packet) => packet.type === "release" || packet.down === true,
+      ),
+    ).toBe(false);
+    act(() => {
+      if (reason === "untrack")
+        mock.handlers.track(
+          mock.track,
+          { source: "screen" },
+          { identity: `device-${device.id}` },
+        );
+      else mock.handlers.reconnected();
+    });
+    await tick(500);
+    expect(screen.getByRole("button", { name: "Systeme" })).toBeEnabled();
+    expect(mock.lease).toBe(originalLease);
+    expect(
+      mock.request.mock.calls.filter(
+        ([path, method]) => path.endsWith("/control") && method === "POST",
+      ),
+    ).toHaveLength(1);
+    expect(
+      mock.request.mock.calls.some(
+        ([path, method]) => path.endsWith("/control") && method === "DELETE",
+      ),
+    ).toBe(false);
+    expect(
+      mock.publish.mock.calls
+        .map(([data]) => JSON.parse(new TextDecoder().decode(data)))
+        .some((packet) => packet.down === true),
+    ).toBe(false);
+  },
+);
+
+it.each(["release", "revocation", "timeout"])(
+  "does not restore manual control after %s during a media pause",
+  async (reason) => {
+    render(<RemoteViewer device={device} onClose={vi.fn()} mobile />);
+    await tick();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Manuelle Steuerung übernehmen" }),
+    );
+    await tick();
+    act(() => mock.handlers.reconnecting());
+    if (reason === "release")
+      fireEvent.click(screen.getByRole("button", { name: "Release control" }));
+    else if (reason === "revocation") mock.lease = null;
+    await tick(reason === "timeout" ? 8500 : 1000);
+    act(() => mock.handlers.reconnected());
+    await tick(1000);
+    expect(mock.lease).toBeNull();
+    expect(screen.getByRole("button", { name: "Systeme" })).toBeDisabled();
+    expect(
+      mock.request.mock.calls.filter(
+        ([path, method]) => path.endsWith("/control") && method === "POST",
+      ),
+    ).toHaveLength(1);
+  },
+);
+
+it("ignores unsubscription of an unrelated track", async () => {
+  render(<RemoteViewer device={device} onClose={vi.fn()} mobile />);
+  await tick();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Manuelle Steuerung übernehmen" }),
+  );
+  await tick();
+  act(() => mock.handlers.untrack({ kind: "audio", detach: vi.fn() }));
+  await tick(500);
+  expect(screen.getByRole("button", { name: "Systeme" })).toBeEnabled();
+  expect(mock.lease?.mode).toBe("manual");
+});
+
+it("ignores a late data failure from a released control epoch", async () => {
+  render(<RemoteViewer device={device} onClose={vi.fn()} mobile />);
+  await tick();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Manuelle Steuerung übernehmen" }),
+  );
+  await tick();
+  let rejectOld!: (reason: Error) => void;
+  mock.publish.mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        rejectOld = reject;
+      }),
+  );
+  fireEvent.keyDown(
+    screen.getByLabelText("Elite remote keyboard and mouse control"),
+    { code: "ArrowUp" },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Release control" }));
+  await tick(20);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Manuelle Steuerung übernehmen" }),
+  );
+  await tick(20);
+  await act(async () => rejectOld(new Error("Old data channel failed")));
+  await tick(500);
+  expect(mock.lease?.epoch).toBe("epoch-2");
+  expect(screen.getByRole("button", { name: "Systeme" })).toBeEnabled();
 });
 
 it("starts an assist only after reviewing and checking its required confirmations", async () => {
@@ -270,7 +411,6 @@ it.each([
   "pagehide",
   "blur",
   "disconnected",
-  "untrack",
   "input-failure",
   "access-revoked",
 ])("releases manual control on %s", async (reason) => {
@@ -283,8 +423,6 @@ it.each([
   if (reason === "pagehide" || reason === "blur")
     fireEvent(window, new Event(reason));
   else if (reason === "disconnected") act(() => mock.handlers.disconnected());
-  else if (reason === "untrack")
-    act(() => mock.handlers.untrack({ detach: vi.fn() }));
   else if (reason === "input-failure")
     mock.publish.mockRejectedValue(new Error("Data channel failed"));
   else mock.failStatus = true;

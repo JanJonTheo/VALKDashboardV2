@@ -50,6 +50,25 @@ foreground and local watchdog checks apply to all touch-generated input packets.
 
 ## Verification
 
+Current fix rollout: `20261021-remote-reconnect`. Reports, API backups and database
+snapshots are in `/home/valk/dashboard-v2/shared/20261021-remote-reconnect`.
+The full dashboard suite, final 22 viewer regression tests, 15 browser checks,
+164 backend tests plus 31 subtests and 27 Linux companion tests passed. All 30
+public HTTPS checks passed after the archive-retention fix; sampled control/API
+requests completed in 35–123 ms. Shadow-PC reported live capture and all 28 actions.
+No real input or assist start was sent by verification. Rollback restores both
+`remote_screen.py` and `anke_data.py` from `backend-before`, restarts `valkflask`,
+and switches the dashboard to `20261021-mobile-navigation`; database restoration
+is unnecessary and would overwrite newer activity.
+
+Manual control pauses during brief video replacements, reconnecting media or stale
+frames. All held input is cleared immediately; only neutral state heartbeats retain
+the existing lease. Fresh video resumes controls within an eight-second grace period.
+No key-down is replayed. Release, backgrounding, permission loss, failed input channels
+or a longer interruption still end control. The dashboard never automatically
+acquires a new lease after server/client revocation. The companion API reads bounded
+upload bodies outside its session lock so slow uploads cannot stall heartbeats.
+
 The dashboard also provides **Operations → Mobile Remote**, both in its desktop
 sidebar and its mobile navigation drawer. It opens `/remote` directly; the existing
 ANKe Remote entry continues to provide pairing, sharing and diagnostics.

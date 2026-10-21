@@ -2,6 +2,13 @@
 
 Changes to VALK Dashboard, listed in reverse chronological order. Dates and times use Europe/Berlin.
 
+## 21.10.2026 - Preserve manual control through brief media interruptions
+
+- Brief video-track replacements, media reconnects and stale frames now pause manual input while retaining the existing control lease for up to eight seconds. Controls resume with fresh video; held keys and mouse buttons are released and never replayed.
+- Unrelated track events and late data-send failures from older sessions no longer cancel current manual control. Explicit release, leaving the page, permission loss, input-channel failure and extended interruptions still stop control; revoked or expired leases are never automatically reacquired.
+- Added regression checks for track replacement, reconnection, neutral input, recovery deadlines, explicit release and access revocation. The companion API now reads bounded upload bodies before taking the shared session lock, preventing slow diagnostic uploads from blocking heartbeats.
+- Deployed `20261021-remote-reconnect` with the API upload and archive-retention fixes. All 30 public HTTPS checks passed; sampled control/API requests now complete in roughly 35–123 ms instead of intermittent 1–2 second stalls. The full dashboard suite, all 22 final viewer tests, 15 browser checks, lint, TypeScript and the Linux production build passed.
+
 ## 21.10.2026 - Tablet and mobile ANKe Remote
 
 - Added Operations → Mobile Remote as a direct entry to the tablet controls in the desktop sidebar and mobile navigation. The existing ANKe Remote page retains its pairing and diagnostics tools.
