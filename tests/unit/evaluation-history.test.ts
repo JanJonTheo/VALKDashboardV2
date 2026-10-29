@@ -7,6 +7,25 @@ import {
 const now = new Date("2026-09-03T15:42:00Z");
 
 describe("evaluation history periods", () => {
+  it("combines all commanders before applying the chart limit", () => {
+    const buckets = evaluationHistoryRange({ period: "cw", now }).buckets;
+    const rows = Array.from({ length: 12 }, (_, index) => ({
+      bucket: "0",
+      cmdr: `Commander ${index}`,
+      value: index + 1,
+    }));
+    rows.push({ bucket: "2", cmdr: "Commander 0", value: 3 });
+    rows.push({ bucket: "invalid", cmdr: "Commander 0", value: 999 });
+    rows.push({ bucket: "0", cmdr: "Commander 0", value: NaN });
+
+    for (const limit of [5, 10]) {
+      expect(evaluationHistorySeries(rows, buckets, limit, "all")).toEqual([
+        { name: "All commanders", data: [78, 0, 3, 0, 0, 0, 0], total: 81 },
+      ]);
+    }
+    expect(evaluationHistorySeries([], buckets, 5, "all")).toEqual([]);
+  });
+
   it("uses all 24 UTC hours for day periods", () => {
     const range = evaluationHistoryRange({ period: "cd", now });
 

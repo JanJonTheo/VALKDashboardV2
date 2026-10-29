@@ -121,13 +121,13 @@ export function EvaluationChart({
     )
     .slice(0, limit);
 
-  if (mode === "history" && loading)
+  if (mode !== "totals" && loading)
     return (
       <p className="chart-inline-state" role="status">
         Loading historical values…
       </p>
     );
-  if (mode === "history" && error)
+  if (mode !== "totals" && error)
     return (
       <p className="chart-inline-state chart-inline-error" role="alert">
         {error}
@@ -135,11 +135,11 @@ export function EvaluationChart({
     );
 
   const categories =
-    mode === "history"
+    mode !== "totals"
       ? (history?.buckets.map((bucket) => bucket.label) ?? [])
       : totals.map((row) => row.name);
   const series =
-    mode === "history"
+    mode !== "totals"
       ? (history?.series ?? []).map((item) => ({
           name: item.name,
           type: "line",
@@ -167,7 +167,7 @@ export function EvaluationChart({
     animationDuration: 350,
     aria: {
       enabled: true,
-      description: `${metricLabel} ${mode === "history" ? "history" : "totals"}`,
+      description: `${metricLabel} ${mode !== "totals" ? "history" : "totals"}`,
     },
     textStyle: { fontFamily: "Arial", color: "#9aa4b3" },
     tooltip: {
@@ -178,7 +178,7 @@ export function EvaluationChart({
       valueFormatter: (value: number) => formatValue(value),
     },
     legend:
-      mode === "history"
+      mode !== "totals"
         ? {
             type: "scroll",
             bottom: 0,
@@ -189,12 +189,12 @@ export function EvaluationChart({
       left: 58,
       right: 22,
       top: 26,
-      bottom: mode === "history" ? 64 : 54,
+      bottom: mode !== "totals" ? 64 : 54,
       containLabel: false,
     },
     xAxis: {
       type: "category",
-      boundaryGap: mode !== "history",
+      boundaryGap: mode === "totals",
       data: categories,
       axisLabel: {
         color: "#778291",
@@ -228,12 +228,12 @@ export function EvaluationChart({
       />
       <table className="sr-only">
         <caption>
-          {metricLabel} {mode === "history" ? "history" : "totals"}
+          {metricLabel} {mode !== "totals" ? "history" : "totals"}
         </caption>
         <thead>
           <tr>
             <th>Commander</th>
-            {mode === "history" ? (
+            {mode !== "totals" ? (
               categories.map((category) => <th key={category}>{category}</th>)
             ) : (
               <th>{metricLabel}</th>
@@ -241,7 +241,7 @@ export function EvaluationChart({
           </tr>
         </thead>
         <tbody>
-          {mode === "history"
+          {mode !== "totals"
             ? history?.series.map((item) => (
                 <tr key={item.name}>
                   <th>{item.name}</th>

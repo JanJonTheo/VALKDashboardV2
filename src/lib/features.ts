@@ -217,8 +217,11 @@ export const features: FeatureSpec[] = [
     metrics: [
       { label: "Evaluated", key: "commanders" },
       { label: "Missions", key: "missions" },
+      { label: "Trade volume", key: "volume" },
       { label: "Trade quantity", key: "quantity" },
       { label: "Bounty vouchers", key: "bountyVouchers" },
+      { label: "Combat bonds", key: "combatBonds" },
+      { label: "Exploration sales", key: "explorationSales" },
     ],
     chart: {
       title: "Completed missions",

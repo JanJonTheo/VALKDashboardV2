@@ -1118,18 +1118,40 @@ test("evaluations applies period and metric to the requested visual only", async
     detailRequests.every((request) => !request.searchParams.has("metric")),
   ).toBe(true);
 
-  await page.getByRole("button", { name: "Historical trend" }).click();
+  await expect(page.locator(".evaluation-metrics article > span")).toHaveText([
+    "Evaluated",
+    "Missions",
+    "Trade volume",
+    "Trade quantity",
+    "Bounty vouchers",
+    "Combat bonds",
+    "Exploration sales",
+  ]);
+  await page.getByRole("button", { name: "Historical Trend/Cmdr" }).click();
   await expect(
     page.getByRole("heading", { name: "Profit historical trend" }),
   ).toBeVisible();
   await expect.poll(() => historyParam("period")).toBe("cw");
   expect(historyParam("metric")).toBe("profit");
   expect(historyParam("mode")).toBe("full");
+  expect(historyParam("scope")).toBe("cmdr");
   await expect(page.locator(".chart-surface canvas")).toBeVisible();
 
   await page.getByRole("button", { name: "Top 5 by missions" }).click();
   await expect.poll(() => historyParam("mode")).toBe("top5");
   await expect(page.getByText(/Top 5 · Metric does not filter/)).toHaveCount(1);
+  await page.getByRole("button", { name: "Historical Trend/All" }).click();
+  await expect.poll(() => historyParam("scope")).toBe("all");
+  await expect(page).toHaveURL(/chart=history-all/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Profit historical trend — All commanders",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/All commanders · Metric does not filter/),
+  ).toHaveCount(1);
+  await expect(page.locator(".chart-surface canvas")).toBeVisible();
   await page.getByRole("button", { name: "Send report" }).click();
   await expect
     .poll(() => (discordReport as { mode?: unknown } | null)?.mode)

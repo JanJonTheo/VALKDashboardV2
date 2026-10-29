@@ -39,6 +39,7 @@ const querySchema = z.object({
     .enum(leaderboardMetricOptions.map((option) => option.value))
     .default("missions"),
   mode: z.enum(["full", "top5"]).default("full"),
+  scope: z.enum(["cmdr", "all"]).default("cmdr"),
   commander: z.string().trim().max(100).optional(),
   from_date: z.string().optional(),
   to_date: z.string().optional(),
@@ -225,7 +226,12 @@ export async function GET(request: Request) {
           key,
           label,
         })),
-        series: evaluationHistorySeries(rows, effectiveRange.buckets, limit),
+        series: evaluationHistorySeries(
+          rows,
+          effectiveRange.buckets,
+          limit,
+          parsed.data.scope,
+        ),
         generated_at: new Date().toISOString(),
       },
       { headers: { "cache-control": "no-store" } },

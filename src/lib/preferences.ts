@@ -21,7 +21,11 @@ export const leaderboardMetricOptions = [
 export type LeaderboardMetric =
   (typeof leaderboardMetricOptions)[number]["value"];
 
-export const evaluationChartModes = ["totals", "history"] as const;
+export const evaluationChartModes = [
+  "totals",
+  "history",
+  "history-all",
+] as const;
 export type EvaluationChartMode = (typeof evaluationChartModes)[number];
 
 const sortingEntry = z.object({

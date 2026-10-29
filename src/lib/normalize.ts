@@ -355,6 +355,9 @@ function computeMetrics(
         missions: sum(data, "missions"),
         quantity: sum(data, "quantity"),
         bountyVouchers: sum(data, "bountyVouchers"),
+        volume: sum(data, "volume"),
+        combatBonds: sum(data, "combatBonds"),
+        explorationSales: sum(data, "explorationSales"),
       };
     case "monthly-performance":
       return {

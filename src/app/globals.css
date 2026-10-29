@@ -6230,3 +6230,28 @@ textarea:focus-visible {
 .conflict-parties dt, .conflict-details small { color: var(--muted); font-size: 11px; }
 .conflict-parties dd { margin: 0; text-align: right; font-size: 12px; }
 @media(max-width: 600px) { .conflict-parties { grid-template-columns: 1fr; } }
+
+/* Seven evaluation totals retain their reading order on narrow screens. */
+.metric-strip.evaluation-metrics {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.metric-strip.evaluation-metrics article {
+  padding: 16px;
+  border: 0;
+  box-shadow: 1px 0 var(--line), 0 1px var(--line);
+}
+@media (max-width: 1200px) {
+  .metric-strip.evaluation-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .metric-strip.evaluation-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 420px) {
+  .metric-strip.evaluation-metrics {
+    grid-template-columns: 1fr;
+  }
+}

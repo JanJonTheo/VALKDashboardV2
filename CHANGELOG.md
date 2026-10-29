@@ -2,6 +2,11 @@
 
 Changes to VALK Dashboard, listed in reverse chronological order. Dates and times use Europe/Berlin.
 
+## 29.10.2026 - Evaluation trends and totals
+
+- Evaluations now offers Historical Trend/Cmdr and Historical Trend/All. The combined trend includes every commander before the Top 5/10 chart limit.
+- Added trade volume, combat bonds and exploration sales to the evaluation totals, with a responsive layout for all seven values.
+
 ## 21.10.2026 - Preserve manual control through brief media interruptions
 
 - Brief video-track replacements, media reconnects and stale frames now pause manual input while retaining the existing control lease for up to eight seconds. Controls resume with fresh video; held keys and mouse buttons are released and never replayed.

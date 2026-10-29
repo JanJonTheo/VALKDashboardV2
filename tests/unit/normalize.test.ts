@@ -2,6 +2,40 @@ import { describe, expect, it } from "vitest";
 import { normalizeFeaturePayload } from "@/lib/normalize";
 
 describe("Flask contract normalization", () => {
+  it("sums all seven evaluation metrics from the selected period", () => {
+    const result = normalizeFeaturePayload("evaluations", {
+      data: [
+        {
+          cmdr: "A",
+          missions_completed: 2,
+          total_volume: 100,
+          total_quantity: 3,
+          bounty_vouchers: 200,
+          combat_bonds: 300,
+          exploration_sales: 400,
+        },
+        {
+          cmdr: "B",
+          missions_completed: 4,
+          total_volume: 500,
+          total_quantity: 6,
+          bounty_vouchers: 700,
+          combat_bonds: 800,
+          exploration_sales: 900,
+        },
+      ],
+    });
+    expect(result.metrics).toEqual({
+      commanders: 2,
+      missions: 6,
+      volume: 600,
+      quantity: 9,
+      bountyVouchers: 900,
+      combatBonds: 1100,
+      explorationSales: 1300,
+    });
+  });
+
   it("keeps squadron rank separate from the alphabetical row number", () => {
     const result = normalizeFeaturePayload("leaderboard", {
       data: [

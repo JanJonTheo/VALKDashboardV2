@@ -344,11 +344,16 @@ export function FeatureDashboard({
       (option) => option.value === savedView.view.metric,
     ) ?? leaderboardMetricOptions[0];
   const evaluationChartMode: EvaluationChartMode =
-    savedView.view.chartMode === "history" ? "history" : "totals";
+    savedView.view.chartMode === "history-all"
+      ? "history-all"
+      : savedView.view.chartMode === "history"
+        ? "history"
+        : "totals";
   const evaluationHistoryParams = new URLSearchParams({
     period: savedView.view.period ?? "all",
     metric: selectedMetric.value,
     mode: savedView.view.variant === "top5" ? "top5" : "full",
+    scope: evaluationChartMode === "history-all" ? "all" : "cmdr",
   });
   for (const key of ["from_date", "to_date", "from_month", "to_month"]) {
     const value = viewFilterString(savedView.view.filters[key]);
@@ -367,7 +372,7 @@ export function FeatureDashboard({
       getEvaluationHistory(evaluationHistoryParams.toString(), signal),
     refetchInterval: spec.key === "evaluations" ? spec.refreshMs : false,
     refetchIntervalInBackground: false,
-    enabled: spec.key === "evaluations" && evaluationChartMode === "history",
+    enabled: spec.key === "evaluations" && evaluationChartMode !== "totals",
   });
 
   useEffect(() => {
@@ -1022,7 +1027,9 @@ export function FeatureDashboard({
         }
         onChange={setVariant}
       />
-      <div className="metric-strip">
+      <div
+        className={`metric-strip${spec.key === "evaluations" ? " evaluation-metrics" : ""}`}
+      >
         {effectiveSpec.metrics.map((metric) => {
           const selectedKey = savedView.view.metric ?? "missions";
           const selectedValues = rows.map(
@@ -1098,7 +1105,7 @@ export function FeatureDashboard({
           ? constructions.length > 0
           : isContributionView
             ? contributionGroups.length > 0
-            : spec.key === "evaluations" && evaluationChartMode === "history"
+            : spec.key === "evaluations" && evaluationChartMode !== "totals"
               ? true
               : rows.length > 0) && (
           <section className="surface chart-surface">
@@ -1113,8 +1120,8 @@ export function FeatureDashboard({
                     : isContributionView
                       ? "Commander commodity contributions"
                       : spec.key === "evaluations"
-                        ? evaluationChartMode === "history"
-                          ? `${selectedMetric.label} historical trend`
+                        ? evaluationChartMode !== "totals"
+                          ? `${selectedMetric.label} historical trend${evaluationChartMode === "history-all" ? " — All commanders" : ""}`
                           : `${selectedMetric.label} totals by commander`
                         : effectiveSpec.chart.title}
                 </h2>
@@ -1128,7 +1135,8 @@ export function FeatureDashboard({
                     {(
                       [
                         ["totals", "Totals"],
-                        ["history", "Historical trend"],
+                        ["history", "Historical Trend/Cmdr"],
+                        ["history-all", "Historical Trend/All"],
                       ] as const
                     ).map(([value, label]) => (
                       <button
@@ -1153,8 +1161,10 @@ export function FeatureDashboard({
                     ))}
                   </div>
                   <span className="table-alternative">
-                    Top {savedView.view.variant === "top5" ? 5 : 10} · Metric
-                    does not filter the detail table.
+                    {evaluationChartMode === "history-all"
+                      ? "All commanders"
+                      : `Top ${savedView.view.variant === "top5" ? 5 : 10}`}{" "}
+                    · Metric does not filter the detail table.
                   </span>
                 </div>
               ) : (

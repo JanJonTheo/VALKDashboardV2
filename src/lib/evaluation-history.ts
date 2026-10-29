@@ -279,6 +279,7 @@ export function evaluationHistorySeries(
   rows: EvaluationHistoryRow[],
   buckets: EvaluationHistoryBucket[],
   limit: number,
+  scope: "cmdr" | "all" = "cmdr",
 ): EvaluationHistorySeries[] {
   const bucketKeys = new Set(buckets.map((bucket) => bucket.key));
   const values = new Map<string, Map<string, number>>();
@@ -287,9 +288,10 @@ export function evaluationHistorySeries(
     const bucket = String(row.bucket ?? "");
     const value = Number(row.value);
     if (!cmdr || !bucketKeys.has(bucket) || !Number.isFinite(value)) continue;
-    const commander = values.get(cmdr) ?? new Map<string, number>();
+    const name = scope === "all" ? "All commanders" : cmdr;
+    const commander = values.get(name) ?? new Map<string, number>();
     commander.set(bucket, (commander.get(bucket) ?? 0) + value);
-    values.set(cmdr, commander);
+    values.set(name, commander);
   }
 
   return [...values]

@@ -8,6 +8,12 @@ import {
 } from "@/lib/preferences";
 
 describe("dashboard view preferences", () => {
+  it("preserves commander history views and saves combined history views", () => {
+    for (const chartMode of ["history", "history-all"]) {
+      expect(preferencePayload({ chartMode })?.chartMode).toBe(chartMode);
+    }
+  });
+
   it("uses the approved current-month and missions defaults", () => {
     const preference = defaultViewPreference("leaderboard", [
       "cmdr",
