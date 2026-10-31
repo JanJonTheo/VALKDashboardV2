@@ -2,6 +2,21 @@
 
 Changes to VALK Dashboard, listed in reverse chronological order. Dates and times use Europe/Berlin.
 
+## 01.11.2026 - Remote autopilot overview
+
+- Removed the introductory text from the tablet and mobile remote view to leave more room for controls. Commander, active assistant, AP log and AP status now appear above the live screen, making flight progress visible without scrolling below the video.
+- FSD Route Assist also shows completed and total jumps above the live screen, using the same counters as the ANKe overlay. The companion client and API now transmit the overview values.
+- Included the GALTEA watchlist import, whole-list global statistics and 200-system personal watchlists in this source release, with matching API payload limits, regression tests and deployment guidance. Deployment backups stay outside version control.
+- Deployed the dashboard and compatible API with rollback backups; all 32 public HTTPS checks passed. Validation passed 256 dashboard tests, 18 browser checks, 21 API tests, TypeScript, lint and the Linux production build. The EDAP-GUI offline update passed package integrity, isolated installation, personal-data preservation, its included tests and rollback checks.
+
+## 31.10.2026 - GALTEA watchlists and global statistics
+
+- Assigned all 29 GALTEA systems their project names and merged 22 missing systems into jjt's personal watchlist, bringing it to 108 systems while preserving existing entries and favorites. Corrected Utgard's project name.
+- Added Statistics to the Global Watchlist, covering the entire list across all pages with population, security, allegiance, Powerplay and cached station totals.
+- Expanded personal watchlists to 200 systems and split data requests into batches of at most 100, so larger lists continue to load and save. The companion API allows the larger watchlist preference payload.
+- Improved small-text contrast in the statistics dialog. Watchlist tests now run on Windows and Linux, and lint excludes generated browser reports.
+- Deployed the dashboard and companion API update with backups. Verified all 29 shared labels, all 108 personal systems, preserved favorites and statistics for all 38 global systems through public HTTPS. The 255 unit tests, six desktop/tablet/phone browser checks, five companion API tests, import regression, lint, TypeScript and production build passed. Startup readiness now accounts for EDDN database maintenance before watchlist acceptance checks.
+
 ## 29.10.2026 - Evaluation trends and totals
 
 - Evaluations now offers Historical Trend/Cmdr and Historical Trend/All. The combined trend includes every commander before the Top 5/10 chart limit.

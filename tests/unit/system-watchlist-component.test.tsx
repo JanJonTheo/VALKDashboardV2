@@ -110,6 +110,23 @@ describe("SystemWatchlist scopes", () => {
               data: [],
               generated_at: "2026-08-30T00:00:00Z",
             });
+          if (url === "/api/system-watchlist/global?statistics=true")
+            return Response.json({
+              statistics: {
+                systemCount: 108,
+                availableCount: 108,
+                totalPopulation: 1080,
+                largestPopulationSystem: {
+                  name: "Beyond first page",
+                  population: 1000,
+                },
+                security: [],
+                allegiance: [],
+                powerplay: [],
+                facilities: [],
+                facilityCachedSystems: 0,
+              },
+            });
           if (url.startsWith("/api/system-watchlist/global?"))
             return Response.json(globalPayload);
           if (url.startsWith("/api/system-watchlist/protected?"))
@@ -221,6 +238,35 @@ describe("SystemWatchlist scopes", () => {
         "#fff",
       )["--superpower-icon"],
     ).toContain("/superpowers/empire.svg");
+  });
+
+  it("opens global statistics for the entire list", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SystemWatchlist
+          tenantFactionName="East India Company"
+          canManageTenantRules={false}
+          canRunBgsAi={false}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Global watchlist" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Statistics" }));
+    await screen.findByText("Beyond first page");
+    const dialog = screen.getByRole("dialog", { name: "Watchlist statistics" });
+    expect(within(dialog).getByText("108")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/all systems in the global watchlist/),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close statistics" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
   });
 
   it("starts personal, opens the global filter sheet and adds a system", async () => {

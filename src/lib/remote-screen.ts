@@ -2,6 +2,8 @@ export interface MediaAccess { url: string; token: string; room: string; identit
 export interface RemoteStatus {
   input_bindings?: import("./remote-touch").TouchBindings;
   commander?: string; fid?: string; assist?: string; capture?: string; frame_at?: number;
+  ap_log?: string; ap_status?: string;
+  jump_count?: number; total_jumps?: number;
   manual_ready?: boolean; enabled?: boolean; control_enabled?: boolean;
 }
 export interface RemoteDevice {

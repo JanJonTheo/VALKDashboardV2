@@ -16,7 +16,7 @@ test("mobile remote has touch-sized panel controls and assist access without das
               owner: true,
               grants: {},
               can_control: true,
-              status: { commander: "Test Commander", control_enabled: true },
+              status: { commander: "Test Commander", assist: "FSD Route Assist", ap_log: "Jump complete", ap_status: "Aligning", jump_count: 3, total_jumps: 12, control_enabled: true },
             },
           ],
         },
@@ -31,12 +31,25 @@ test("mobile remote has touch-sized panel controls and assist access without das
   await page.goto("/remote");
   await expect(
     page.getByRole("heading", { name: "ANKe Remote", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(page.getByText("Tablet & mobile control", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Livebild, Panels und Assistenten – direkt per Touch.", { exact: true })).toHaveCount(0);
   expect(joins).toBe(0);
   await expect(
     page.getByRole("button", { name: "Pair an ANKe client" }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Verbinden", exact: true }).click();
+  const overview = page.getByRole("definition");
+  await expect(overview.filter({ hasText: "Test Commander" })).toBeVisible();
+  await expect(overview.filter({ hasText: "FSD Route Assist" })).toBeVisible();
+  await expect(overview.filter({ hasText: "3 von 12" })).toBeVisible();
+  await expect(overview.filter({ hasText: "Jump complete" })).toBeVisible();
+  await expect(overview.filter({ hasText: "Aligning" })).toBeVisible();
+  const summary = page.locator('dl[aria-label="Autopilot overview"]');
+  const video = page.locator(".remote-video");
+  const summaryBox = await summary.boundingBox();
+  const videoBox = await video.boundingBox();
+  expect(summaryBox!.y + summaryBox!.height).toBeLessThanOrEqual(videoBox!.y);
   await expect(
     page.getByRole("alert").filter({ hasText: "media connection unavailable" }),
   ).toBeVisible();

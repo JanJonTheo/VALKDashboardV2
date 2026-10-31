@@ -10,10 +10,17 @@ import {
 } from "@/lib/global-system-watchlist";
 import { flaskRequest } from "@/lib/flask";
 import { AccessError, requireDashboardSession } from "@/lib/session";
-import { humanizeBgsValue, tenantFactionAliases } from "@/lib/system-watchlist";
+import {
+  calculateWatchlistStatistics,
+  normalizeWatchedSystems,
+  humanizeBgsValue,
+  tenantFactionAliases,
+} from "@/lib/system-watchlist";
 import { getTenantById } from "@/lib/tenant-config";
 
 import { loadWatchlistLabels } from "@/lib/watchlist-labels-store";
+
+import { fetchWatchlistData } from "@/lib/watchlist-data";
 
 export const runtime = "nodejs";
 
@@ -174,16 +181,58 @@ export async function GET(request: Request) {
       projects = [
         ...new Set(index.map((row) => row.project_name ?? "").filter(Boolean)),
       ].sort();
-      const filtered = filterAndSortGlobalSystems(index, parsed.data);
+      const filtered =
+        parsed.data.statistics === "true"
+          ? index
+          : filterAndSortGlobalSystems(index, parsed.data);
       total = filtered.length;
       const pageStart = (parsed.data.page - 1) * globalWatchlistPageSize;
       systemNames = filtered
-        .slice(pageStart, pageStart + globalWatchlistPageSize)
+        .slice(
+          parsed.data.statistics === "true" ? 0 : pageStart,
+          parsed.data.statistics === "true"
+            ? undefined
+            : pageStart + globalWatchlistPageSize,
+        )
         .map((row) => row.system_name);
       allegiances = filterOptions(index, "allegiance");
       governments = filterOptions(index, "government");
     } finally {
       database.close();
+    }
+
+    if (parsed.data.statistics === "true") {
+      const upstreamUrl = new URL(request.url);
+      upstreamUrl.search = "";
+      const response = await fetchWatchlistData(
+        new Request(upstreamUrl, { signal: request.signal }),
+        session,
+        systemNames,
+      );
+      const payload = await response.json();
+      if (!response.ok)
+        return NextResponse.json(payload, {
+          status: response.status,
+          headers: { "cache-control": "no-store" },
+        });
+      const facilities = payload.facility_statistics;
+      return NextResponse.json(
+        {
+          statistics: calculateWatchlistStatistics(
+            normalizeWatchedSystems(payload),
+            total,
+            {
+              dodec: facilities.types.dodec ?? 0,
+              orbis: facilities.types.orbis ?? 0,
+              ocellus: facilities.types.ocellus ?? 0,
+              coriolis: facilities.types.coriolis ?? 0,
+              cachedSystems: facilities.cached_systems,
+              requestedSystems: facilities.requested_systems,
+            },
+          ),
+        },
+        { headers: { "cache-control": "no-store" } },
+      );
     }
 
     let data: unknown[] = [];

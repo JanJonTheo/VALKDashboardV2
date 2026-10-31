@@ -5842,7 +5842,7 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 .watch-statistics-kpis small {
-  color: var(--faint);
+  color: #8995a5;
   font-size: 9px;
 }
 .watch-statistics-sections {
@@ -5918,14 +5918,14 @@ textarea:focus-visible {
   font-size: 10px;
 }
 .watch-statistics-distribution strong small {
-  color: var(--faint);
+  color: #8995a5;
   font-size: 8px;
   font-weight: 500;
 }
 .watch-statistics-source-note {
   display: block;
   padding: 0 10px 10px;
-  color: var(--faint);
+  color: #8995a5;
   font-size: 9px;
 }
 .watch-statistics-note {

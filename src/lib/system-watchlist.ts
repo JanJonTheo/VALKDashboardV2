@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const personalWatchlistLimit = 200;
+
 export const systemWatchlistEntrySchema = z.object({
   system: z.string().trim().min(2).max(255),
   sector: z.string().trim().max(80).default(""),
@@ -9,7 +11,10 @@ export const systemWatchlistEntrySchema = z.object({
 
 export const systemWatchlistSchema = z
   .object({
-    systems: z.array(systemWatchlistEntrySchema).max(100).default([]),
+    systems: z
+      .array(systemWatchlistEntrySchema)
+      .max(personalWatchlistLimit)
+      .default([]),
   })
   .superRefine((value, context) => {
     const seen = new Set<string>();

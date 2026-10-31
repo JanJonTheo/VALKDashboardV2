@@ -53,12 +53,12 @@ export async function PUT(request: Request) {
   try {
     const session = await requireDashboardSession();
     const raw = await request.text();
-    if (new TextEncoder().encode(raw).length > 16 * 1024)
+    if (new TextEncoder().encode(raw).length > 128 * 1024)
       return NextResponse.json(
         {
           error: {
             code: "PAYLOAD_TOO_LARGE",
-            message: "The system watchlist exceeds 16 KB",
+            message: "The system watchlist exceeds 128 KB",
           },
         },
         { status: 413 },

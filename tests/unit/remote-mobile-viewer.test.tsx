@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RemoteViewer } from "@/components/anke-remote";
-import type { ControlLease, RemoteDevice } from "@/lib/remote-screen";
+import type { ControlLease, RemoteDevice, RemoteStatus } from "@/lib/remote-screen";
 
 const mock = vi.hoisted(() => ({
   request: vi.fn(),
@@ -17,6 +17,7 @@ const mock = vi.hoisted(() => ({
   ready: true,
   failStatus: false,
   controlEpoch: 0,
+  status: {} as RemoteStatus,
   track: { kind: "video", attach: vi.fn(), detach: vi.fn() },
   handlers: {} as Record<string, (...args: unknown[]) => void>,
 }));
@@ -68,6 +69,7 @@ beforeEach(() => {
   mock.ready = true;
   mock.failStatus = false;
   mock.controlEpoch = 0;
+  mock.status = {};
   mock.handlers = {};
   mock.track = { kind: "video", attach: vi.fn(), detach: vi.fn() };
   mock.publish.mockReset().mockResolvedValue(undefined);
@@ -124,6 +126,7 @@ beforeEach(() => {
       media: { room: "test" },
       server_time: Date.now() / 1000,
       status: {
+        ...mock.status,
         capture: "live",
         frame_at: Date.now() / 1000,
         manual_ready: mock.ready,
@@ -143,6 +146,31 @@ async function tick(ms = 1000) {
     await vi.advanceTimersByTimeAsync(ms);
   });
 }
+
+it("shows the device overview above the video and replaces it with fresh status, including a stopped assist", async () => {
+  const { container } = render(<RemoteViewer device={{ ...device, status: {
+    commander: "Shadow", assist: "FSD Route Assist", ap_log: "Jump complete", ap_status: "Aligning", jump_count: 3, total_jumps: 12,
+  } }} onClose={vi.fn()} mobile />);
+  const overview = screen.getByLabelText("Autopilot overview");
+  expect(overview).toHaveTextContent("Shadow");
+  expect(overview).toHaveTextContent("FSD Route Assist");
+  expect(overview).toHaveTextContent("Sprünge:3 von 12");
+  expect(overview).toHaveTextContent("Jump complete");
+  expect(overview).toHaveTextContent("Aligning");
+  expect(overview.compareDocumentPosition(container.querySelector("video")!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  mock.status = { commander: "Shadow", assist: "Supercruise Assist", ap_log: "Destination reached", ap_status: "Complete" };
+  await tick();
+  expect(overview).toHaveTextContent("Supercruise Assist");
+  expect(overview).toHaveTextContent("Destination reached");
+  expect(overview).toHaveTextContent("Complete");
+  expect(overview).not.toHaveTextContent("Sprünge:");
+  mock.status = { commander: "Shadow" };
+  await tick();
+  expect(overview).toHaveTextContent("Aktiver Assistent:Keiner");
+  expect(overview).toHaveTextContent("AP-Log:—");
+  expect(overview).toHaveTextContent("AP-Status:—");
+  expect(overview).not.toHaveTextContent("Waypoint Assist");
+});
 
 it("takes manual control, sends configured panel keys, keeps the lease when tapping controls and releases on stale video", async () => {
   render(<RemoteViewer device={device} onClose={vi.fn()} mobile />);

@@ -34,9 +34,9 @@ export function AnkeRemote({ mobile = false }: { mobile?: boolean }) {
   const device = devices.find((d) => d.id === selected);
   const sharedDevice = devices.find((d) => d.id === sharing && d.owner) ?? (device?.owner ? device : undefined);
   return <section className="space-y-5">
-    <div><p className="text-sm opacity-60">{mobile ? "Tablet & mobile control" : "Operations"}</p><h1 className="text-2xl font-semibold">ANKe Remote</h1>
-      <p className="mt-2 opacity-70">{mobile ? "Livebild, Panels und Assistenten – direkt per Touch." : "Live Elite screens shared with you. Opening a screen starts transmission."}</p>
-      {!mobile && <Link className="inline-block mt-3 underline" href="/remote">Open tablet / mobile remote</Link>}</div>
+    {!mobile && <div><p className="text-sm opacity-60">Operations</p><h1 className="text-2xl font-semibold">ANKe Remote</h1>
+      <p className="mt-2 opacity-70">Live Elite screens shared with you. Opening a screen starts transmission.</p>
+      <Link className="inline-block mt-3 underline" href="/remote">Open tablet / mobile remote</Link></div>}
     {!mobile && <button className={button} onClick={() => void remoteRequest<{code: string}>("pairings", "POST", {}).then((x) => {
       setPairing(x.code); setTimeout(() => setPairing(""), 600000);
     }).catch((e) => setError(String(e)))}>Pair an ANKe client</button>}
@@ -110,7 +110,7 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
   const buttons = useRef(new Set<number>());
   const profileRef = useRef("standard");
   const active = useRef(true);
-  const [status, setStatus] = useState<RemoteStatus>({});
+  const [status, setStatus] = useState<RemoteStatus>(device.status);
   const [age, setAge] = useState("—");
   const [lease, setLease] = useState<ControlLease | null>(null);
   const [connected, setConnected] = useState(false);
@@ -387,6 +387,15 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
   }} className={`remote-viewer rounded border border-white/20 p-3 sm:p-4 space-y-3 ${mobile ? "remote-mobile-viewer" : ""}`}>
     <div className="flex flex-wrap justify-between gap-3"><h2 className="font-semibold">{device.name} · Live screen</h2>
       <button className={button} onClick={onClose}>Close screen</button></div>
+    <dl aria-label="Autopilot overview" className="space-y-1 text-sm">
+      <div className="flex flex-wrap gap-x-6 gap-y-1">
+        <div className="flex min-w-0 gap-2"><dt className="opacity-70">Commander:</dt><dd className="min-w-0 break-words font-semibold">{status.commander || "—"}</dd></div>
+        <div className="flex min-w-0 gap-2"><dt className="opacity-70">Aktiver Assistent:</dt><dd className="min-w-0 break-words font-semibold">{status.assist || "Keiner"}</dd></div>
+        {status.assist === "FSD Route Assist" && <div className="flex min-w-0 gap-2"><dt className="opacity-70">Sprünge:</dt><dd className="font-semibold">{status.jump_count ?? "—"} von {status.total_jumps ?? "—"}</dd></div>}
+      </div>
+      <div className="flex gap-2"><dt className="shrink-0 opacity-70">AP-Log:</dt><dd className="min-w-0 whitespace-pre-wrap break-words">{status.ap_log || "—"}</dd></div>
+      <div className="flex gap-2"><dt className="shrink-0 opacity-70">AP-Status:</dt><dd className="min-w-0 whitespace-pre-wrap break-words">{status.ap_status || "—"}</dd></div>
+    </dl>
     <div className={mobile ? "remote-workspace" : ""}>
     <div ref={surface} tabIndex={mobile ? -1 : 0} aria-label="Elite remote keyboard and mouse control" className="remote-video relative bg-black outline-offset-4"
       onKeyDown={(e) => { if (manual) { e.preventDefault(); if (!e.repeat) { pressed.current.add(e.code); send({ type: "key", code: e.code, down: true }); } } }}
@@ -412,7 +421,6 @@ export function RemoteViewer({ device, onClose, mobile = false }: { device: Remo
     </div>
     <p className="text-sm opacity-70">{connected ? "Connected" : "Waiting"} · Quality: {quality} · Image age: {age}s · {lease ? `Operator ${lease.user}: ${lease.mode}${lease.mode === "manual" && !manual ? " (waiting for ANKe handoff)" : ""}` : "Viewing only"}</p>
     {paused && lease?.mode === "manual" && <p role="status" className="text-sm text-amber-300">Steuerung pausiert – warte auf ein aktuelles Livebild. Die bestehende Freigabe wird kurzzeitig beibehalten.</p>}
-    <p className="text-sm opacity-70">{status.commander || device.status.commander || device.name} · Assist: {status.assist || "—"}</p>
     {notice && <p role="status" className="text-sm text-emerald-300">{notice}</p>}
     <div className="flex flex-wrap gap-2">
       <select className={input} aria-label="Video quality" defaultValue="standard" onChange={(e) => { profileRef.current = e.target.value; }}><option value="standard">720p / 15 FPS</option><option value="detail">1080p / 30 FPS</option></select>

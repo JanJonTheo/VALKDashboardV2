@@ -72,6 +72,7 @@ import {
 import {
   assignFactionColours,
   calculateWatchlistStatistics,
+  personalWatchlistLimit,
   emptyWatchlistFilters,
   hasTenantFaction,
   matchesWatchlistFilters,
@@ -733,8 +734,10 @@ function WatchlistStatisticsDialog({
   statistics,
   open,
   onOpenChange,
+  scope = "personal",
 }: {
   statistics: WatchlistStatistics;
+  scope?: "personal" | "global";
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -748,7 +751,11 @@ function WatchlistStatisticsDialog({
               <Dialog.Title>Watchlist statistics</Dialog.Title>
               <Dialog.Description>
                 Aggregated current EDDN data and locally cached Spansh station
-                data for your personal system list.
+                data for{" "}
+                {scope === "global"
+                  ? "all systems in the global watchlist"
+                  : "your personal system list"}
+                .
               </Dialog.Description>
             </div>
             <Dialog.Close aria-label="Close statistics">
@@ -1755,7 +1762,7 @@ export function SystemStrip({
                 alreadyPersonal
                   ? "Already on your personal watchlist"
                   : personalWatchlistFull
-                    ? "Your personal watchlist already contains 100 systems"
+                    ? `Your personal watchlist already contains ${personalWatchlistLimit} systems`
                     : "Add to personal watchlist"
               }
             >
@@ -2544,6 +2551,26 @@ function GlobalSystemWatchlist({
 } & WatchlistViewProps) {
   const queryClient = useQueryClient();
   const [filterOpen, setFilterOpen] = useState(false);
+  const [statisticsOpen, setStatisticsOpen] = useState(false);
+  const statisticsQuery = useQuery({
+    queryKey: ["system-watchlist-global-statistics"],
+    queryFn: async (): Promise<WatchlistStatistics> => {
+      const response = await fetch(
+        "/api/system-watchlist/global?statistics=true",
+        { cache: "no-store" },
+      );
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(
+          payload.error?.message ??
+            "Global watchlist statistics are unavailable",
+        );
+      return payload.statistics;
+    },
+    enabled: active && statisticsOpen,
+    refetchInterval: active && statisticsOpen ? 60_000 : false,
+    refetchIntervalInBackground: false,
+  });
   const filters = viewFilters;
   const sortField = globalWatchlistSortOptions.some(
     (option) => option.value === viewSortField,
@@ -2674,6 +2701,13 @@ function GlobalSystemWatchlist({
         <div className="watchlist-summary">
           <strong>{total}</strong>
           <span>tenant-faction systems</span>
+          <button
+            type="button"
+            className="watchlist-statistics-button"
+            onClick={() => setStatisticsOpen(true)}
+          >
+            <ChartColumn size={13} aria-hidden="true" /> Statistics
+          </button>
           <span
             className="watchlist-presence-key"
             title={`Systems containing ${tenantFactionName}`}
@@ -2779,9 +2813,15 @@ function GlobalSystemWatchlist({
               canRunBgsAi={canRunBgsAi}
               canEditLabels={canManageTenantRules}
               alreadyPersonal={alreadyPersonal}
-              personalWatchlistFull={personalWatchlist.length >= 100}
+              personalWatchlistFull={
+                personalWatchlist.length >= personalWatchlistLimit
+              }
               onAddToPersonal={() => {
-                if (alreadyPersonal || personalWatchlist.length >= 100) return;
+                if (
+                  alreadyPersonal ||
+                  personalWatchlist.length >= personalWatchlistLimit
+                )
+                  return;
                 mutation.mutate([...personalWatchlist, entry]);
               }}
               onCreateRule={() => {
@@ -2828,6 +2868,45 @@ function GlobalSystemWatchlist({
         </nav>
       )}
 
+      {statisticsOpen && !statisticsQuery.data && (
+        <Dialog.Root open onOpenChange={setStatisticsOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="dialog-overlay" />
+            <Dialog.Content className="modal-content watch-statistics-dialog">
+              <Dialog.Title>Watchlist statistics</Dialog.Title>
+              <Dialog.Description>
+                Statistics for all systems in the global watchlist.
+              </Dialog.Description>
+              {statisticsQuery.isError ? (
+                <div role="alert">
+                  {statisticsQuery.error.message}
+                  <button onClick={() => statisticsQuery.refetch()}>
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <p role="status">Loading global statistics...</p>
+              )}
+              <Dialog.Close aria-label="Close statistics">
+                <X size={19} />
+              </Dialog.Close>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
+      {statisticsQuery.data && (
+        <WatchlistStatisticsDialog
+          statistics={statisticsQuery.data}
+          open={statisticsOpen}
+          onOpenChange={setStatisticsOpen}
+          scope="global"
+        />
+      )}
+      {statisticsQuery.data && statisticsQuery.isError && statisticsOpen && (
+        <div role="alert">
+          Statistics could not be refreshed: {statisticsQuery.error.message}
+        </div>
+      )}
       <WatchlistFilterSheet
         open={filterOpen}
         onOpenChange={setFilterOpen}
@@ -3175,9 +3254,15 @@ function ProtectedFactionsSystemWatchlist({
               canRunBgsAi={canRunBgsAi}
               canEditLabels={canManageTenantRules}
               alreadyPersonal={alreadyPersonal}
-              personalWatchlistFull={personalWatchlist.length >= 100}
+              personalWatchlistFull={
+                personalWatchlist.length >= personalWatchlistLimit
+              }
               onAddToPersonal={() => {
-                if (alreadyPersonal || personalWatchlist.length >= 100) return;
+                if (
+                  alreadyPersonal ||
+                  personalWatchlist.length >= personalWatchlistLimit
+                )
+                  return;
                 mutation.mutate([...personalWatchlist, entry]);
               }}
               onCreateRule={() => {

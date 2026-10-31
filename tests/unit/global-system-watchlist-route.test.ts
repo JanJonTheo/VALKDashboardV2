@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -76,7 +77,7 @@ describe("global system watchlist route", () => {
   beforeEach(() => {
     mocks.labels = new Map();
     mocks.systemNames = ["Alpha", "Beta"];
-    process.env.VALK_EDDN_DATABASE = "C:/shared/bgs_data_eddn.db";
+    process.env.VALK_EDDN_DATABASE = resolve("shared/bgs_data_eddn.db");
     mocks.databasePath = "";
     mocks.prepared.length = 0;
     mocks.closed = false;
@@ -125,7 +126,7 @@ describe("global system watchlist route", () => {
     expect(response.status).toBe(200);
     expect(mocks.requireDashboardSession).toHaveBeenCalledOnce();
     expect(mocks.getTenantById).toHaveBeenCalledWith("tenant-1");
-    expect(mocks.databasePath).toBe("C:/shared/bgs_data_eddn.db");
+    expect(mocks.databasePath).toBe(process.env.VALK_EDDN_DATABASE);
     expect(mocks.closed).toBe(true);
     expect(
       mocks.prepared.some(({ parameters }) =>
@@ -172,6 +173,63 @@ describe("global system watchlist route", () => {
     expect(response.status).toBe(400);
     expect(mocks.requireDashboardSession).not.toHaveBeenCalled();
     expect(mocks.databasePath).toBe("");
+  });
+
+  it("aggregates the complete global list in bounded batches regardless of page and filters", async () => {
+    mocks.systemNames = Array.from({ length: 108 }, (_, i) => `System ${i}`);
+    mocks.flaskRequest.mockImplementation(
+      async (_path: string, request: Request) => {
+        const { systems } = await request.clone().json();
+        return Response.json({
+          data: systems.map((name: string) => ({
+            requested_system: name,
+            available: true,
+            system_info: { system_name: name, population: 10 },
+          })),
+          facility_statistics: {
+            types: { coriolis: systems.length },
+            cached_systems: systems.length,
+          },
+        });
+      },
+    );
+    const response = await GET(
+      new Request(
+        "https://dashboard.test/api/system-watchlist/global?statistics=true&page=4&sector=Missing",
+      ),
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.statistics).toMatchObject({
+      systemCount: 108,
+      availableCount: 108,
+      totalPopulation: 1080,
+      facilityCachedSystems: 108,
+    });
+    expect(payload.statistics.facilities).toContainEqual({
+      label: "Coriolis",
+      count: 108,
+    });
+    expect(mocks.flaskRequest).toHaveBeenCalledTimes(2);
+    const sizes = await Promise.all(
+      mocks.flaskRequest.mock.calls.map(
+        async ([, request]) => (await request.clone().json()).systems.length,
+      ),
+    );
+    expect(sizes).toEqual([100, 8]);
+  });
+
+  it("returns upstream failures instead of partial statistics", async () => {
+    mocks.flaskRequest.mockResolvedValue(
+      Response.json({ error: { message: "Unavailable" } }, { status: 503 }),
+    );
+    const response = await GET(
+      new Request(
+        "https://dashboard.test/api/system-watchlist/global?statistics=true",
+      ),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).not.toHaveProperty("statistics");
   });
 
   it("filters labels across the complete index before pagination", async () => {

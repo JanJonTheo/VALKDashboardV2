@@ -12,6 +12,17 @@ import {
 } from "@/lib/system-watchlist";
 
 describe("system watchlist", () => {
+  it("supports the expanded personal list while retaining a bounded capacity", () => {
+    const systems = Array.from({ length: 200 }, (_, index) => ({
+      system: `System ${index}`,
+    }));
+    expect(systemWatchlistSchema.safeParse({ systems }).success).toBe(true);
+    expect(
+      systemWatchlistSchema.safeParse({
+        systems: [...systems, { system: "Extra" }],
+      }).success,
+    ).toBe(false);
+  });
   it("keeps the tenant metadata and rejects duplicate systems", () => {
     const valid = systemWatchlistSchema.parse({
       systems: [

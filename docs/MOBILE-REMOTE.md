@@ -1,5 +1,22 @@
 # Mobile ANKe Remote
 
+The mobile viewer displays commander, active assistant, AP log and AP status above
+the live screen. The paired ANKe client publishes `ap_log` from its overlay log
+and `ap_status` from its current autopilot state; the companion API forwards both
+fields in device and viewer status. Update `EDRemoteScreen.py` in the ANKe client
+and `remote_screen.py` in the API alongside the dashboard, then restart those
+services. Older clients remain compatible and show a dash for missing AP values.
+FSD Route Assist also shows `jump_count` of `total_jumps`, matching the overlay.
+
+Deployed on 1 November 2026 as `20261101-remote-overview`, with 32 successful
+public HTTPS checks. The EDAP-GUI source update is
+`dist/remote-overview-20261101/ANKe-2.2.0-Update-fuer-2.1.x.zip` in the
+EDAPGui-ANKe repository, built from commit `24486e692dc9b61c46535b64dfcaacff0655b8b2`.
+It supports existing Windows Python 3.11 installations of ANKe 2.1.x and 2.2.0.
+Stop ANKe, extract the ZIP separately, run `Setup-ANKe.cmd` against the existing
+installation, and restart ANKe. The package preserves settings and device pairing.
+SHA-256: `2fb492c6fe304d59278fa0e6649968299309fb8471c323563b1d67f00fec5f66`.
+
 Open `/remote` in the same dashboard installation. Authentication and device access
 are shared with the dashboard. Operations → ANKe Remote links to the mobile view;
 pairing and permission management remain on that existing page.

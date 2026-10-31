@@ -26,6 +26,7 @@ const optionalDate = z.preprocess(
 
 export const globalWatchlistQuerySchema = z
   .object({
+    statistics: z.enum(["true", "false"]).default("false"),
     page: z.coerce.number().int().positive().max(100_000).default(1),
     sort: z
       .enum(globalWatchlistSortOptions.map((option) => option.value))

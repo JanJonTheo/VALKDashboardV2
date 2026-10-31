@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -72,7 +73,7 @@ import { GET } from "@/app/api/system-watchlist/protected/route";
 describe("protected system watchlist route", () => {
   beforeEach(() => {
     mocks.labels = new Map();
-    process.env.VALK_EDDN_DATABASE = "C:/shared/bgs_data_eddn.db";
+    process.env.VALK_EDDN_DATABASE = resolve("shared/bgs_data_eddn.db");
     mocks.databasePath = "";
     mocks.prepared.length = 0;
     mocks.closed = false;
@@ -131,7 +132,7 @@ describe("protected system watchlist route", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.databasePath).toBe("C:/shared/bgs_data_eddn.db");
+    expect(mocks.databasePath).toBe(process.env.VALK_EDDN_DATABASE);
     expect(mocks.closed).toBe(true);
     expect(payload.pagination).toEqual({ page: 1, page_size: 25, total: 2 });
     expect(

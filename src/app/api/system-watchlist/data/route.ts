@@ -3,6 +3,8 @@ import { flaskRequest } from "@/lib/flask";
 import { AccessError, requireDashboardSession } from "@/lib/session";
 import { systemWatchlistSchema } from "@/lib/system-watchlist";
 
+import { fetchWatchlistData } from "@/lib/watchlist-data";
+
 const preferenceKey = "bgs-system-watchlist";
 
 function errorResponse(error: unknown) {
@@ -59,18 +61,10 @@ export async function GET(request: Request) {
         { headers: { "cache-control": "no-store" } },
       );
 
-    const upstream = new Request(request.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        systems: watchlist.map((entry) => entry.system),
-        history_days: 7,
-      }),
-    });
-    const response = await flaskRequest(
-      "system-watchlist-data",
-      upstream,
+    const response = await fetchWatchlistData(
+      request,
       session,
+      watchlist.map((entry) => entry.system),
     );
     const payload = (await response.json().catch(() => null)) as Record<
       string,
